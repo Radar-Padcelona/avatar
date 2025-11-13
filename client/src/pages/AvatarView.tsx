@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import StreamingAvatar, {
   AvatarQuality,
@@ -17,12 +17,55 @@ const AvatarView: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [showAudioButton, setShowAudioButton] = useState(true);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const initializingRef = useRef<boolean>(false);
   const avatarRef = useRef<StreamingAvatar | null>(null);
   const audioActivatedOnce = useRef<boolean>(false);
+  const isChangingAvatar = useRef<boolean>(false);
 
+  // Auto-limpieza de errores después de 5 segundos
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  // Limpieza del avatar
+  const cleanupAvatar = useCallback(async () => {
+    const currentAvatar = avatarRef.current;
+    if (!currentAvatar) return;
+
+    try {
+      console.log('🧹 Limpiando avatar anterior...');
+
+      // Detener chat de voz si está activo
+      if (isListening) {
+        await currentAvatar.closeVoiceChat();
+        setIsListening(false);
+      }
+
+      // Detener avatar
+      await currentAvatar.stopAvatar();
+
+      // Limpiar video
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      avatarRef.current = null;
+      setAvatar(null);
+      console.log('✅ Limpieza completada');
+    } catch (error) {
+      console.error('❌ Error al limpiar avatar:', error);
+    }
+  }, [isListening]);
+
+  // Inicialización del socket
   useEffect(() => {
     // Evitar doble inicialización en React Strict Mode
     if (initializingRef.current) return;
@@ -30,29 +73,35 @@ const AvatarView: React.FC = () => {
 
     // Conectar a Socket.IO
     const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
-    socketRef.current = io(serverUrl);
-
-    socketRef.current.on('connect', () => {
-      console.log('✅ Conectado al servidor');
+    const socketInstance = io(serverUrl, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
     });
 
-    socketRef.current.on('connect_error', (err) => {
-      console.error('❌ Error de conexión:', err);
+    socketRef.current = socketInstance;
+
+    socketInstance.on('connect', () => {
+      console.log('✅ [AVATAR] Conectado al servidor');
+    });
+
+    socketInstance.on('connect_error', (err) => {
+      console.error('❌ [AVATAR] Error de conexión:', err);
       setError('Error de conexión con el servidor');
     });
 
     // Escuchar eventos desde el panel de control
-    socketRef.current.on('avatar-changed', handleAvatarChange);
-    socketRef.current.on('start-voice-chat', () => {
-      console.log('🔔 Evento recibido: start-voice-chat');
+    socketInstance.on('avatar-changed', handleAvatarChange);
+    socketInstance.on('start-voice-chat', () => {
+      console.log('🔔 [AVATAR] Evento recibido: start-voice-chat');
       handleStartVoiceChat();
     });
-    socketRef.current.on('stop-voice-chat', () => {
-      console.log('🔔 Evento recibido: stop-voice-chat');
+    socketInstance.on('stop-voice-chat', () => {
+      console.log('🔔 [AVATAR] Evento recibido: stop-voice-chat');
       handleStopVoiceChat();
     });
-    socketRef.current.on('speak-text', (data: { text: string }) => {
-      console.log('🔔 Evento recibido: speak-text', data);
+    socketInstance.on('speak-text', (data: { text: string }) => {
+      console.log('🔔 [AVATAR] Evento recibido: speak-text', data);
       handleSpeakText(data);
     });
 
@@ -98,24 +147,32 @@ const AvatarView: React.FC = () => {
       setAvatar(avatarInstance);
       avatarRef.current = avatarInstance;
 
-      // Configurar evento cuando el stream esté listo
+      // Configurar eventos del avatar
       avatarInstance.on(StreamingEvents.STREAM_READY, (event: any) => {
         console.log('🎥 Stream listo');
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
-          // El usuario ya hizo clic para iniciar, así que podemos reproducir con audio
           videoRef.current.muted = false;
           videoRef.current.play().then(() => {
             console.log('✅ Video reproduciéndose con audio');
+            setIsLoading(false);
+
+            // Notificar al servidor que el avatar está listo
+            if (socketRef.current) {
+              socketRef.current.emit('avatar-ready');
+            }
           }).catch(err => {
             console.log('⚠️ Error en autoplay:', err);
+            setIsLoading(false);
           });
-          setIsLoading(false);
         }
       });
 
       avatarInstance.on(StreamingEvents.STREAM_DISCONNECTED, () => {
         console.log('⚠️ Stream desconectado');
+        if (socketRef.current) {
+          socketRef.current.emit('error', { message: 'Stream desconectado' });
+        }
       });
 
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
@@ -128,7 +185,7 @@ const AvatarView: React.FC = () => {
         setIsSpeaking(false);
       });
 
-      // Iniciar avatar con configuración STT para chat de voz
+      // Iniciar avatar
       console.log(`🚀 Iniciando avatar: ${avatarState.avatarId}`);
       await avatarInstance.createStartAvatar({
         avatarName: avatarState.avatarId,
@@ -146,19 +203,37 @@ const AvatarView: React.FC = () => {
       console.error('❌ Error al inicializar avatar:', error);
       setError(error instanceof Error ? error.message : 'Error desconocido');
       setIsLoading(false);
+
+      // Notificar error al servidor
+      if (socketRef.current) {
+        socketRef.current.emit('error', {
+          message: error instanceof Error ? error.message : 'Error desconocido'
+        });
+      }
     }
   };
 
   const handleAvatarChange = async (newState: { avatarId: string; voiceId: string }) => {
+    // Prevenir cambios concurrentes
+    if (isChangingAvatar.current) {
+      console.log('⚠️ Ya hay un cambio de avatar en proceso');
+      return;
+    }
+
+    isChangingAvatar.current = true;
+
     try {
-      console.log(`🔄 Cambiando a avatar: ${newState.avatarId}`);
+      console.log(`🔄 [AVATAR] Cambiando a avatar: ${newState.avatarId}`);
       setIsLoading(true);
       setError(null);
 
-      // Detener y limpiar avatar actual
-      if (avatar) {
-        await avatar.stopAvatar();
+      // Notificar inicio del cambio
+      if (socketRef.current) {
+        socketRef.current.emit('avatar-change-start');
       }
+
+      // Limpiar avatar actual
+      await cleanupAvatar();
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
@@ -168,7 +243,7 @@ const AvatarView: React.FC = () => {
 
       const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
 
-      // Obtener nuevo token para el cambio de avatar
+      // Obtener nuevo token
       console.log('🔑 Obteniendo nuevo token...');
       const tokenResponse = await fetch(`${serverUrl}/api/get-token`, {
         method: 'POST'
@@ -180,7 +255,7 @@ const AvatarView: React.FC = () => {
 
       const { token } = await tokenResponse.json();
 
-      // Crear nueva instancia del avatar con el nuevo token
+      // Crear nueva instancia del avatar
       console.log('🎭 Creando nueva instancia del avatar...');
       const avatarInstance = new StreamingAvatar({ token });
       setAvatar(avatarInstance);
@@ -191,19 +266,34 @@ const AvatarView: React.FC = () => {
         console.log('🎥 Stream listo');
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
-          // Si el audio ya fue activado antes, mantenerlo activado
           videoRef.current.muted = false;
           videoRef.current.play().then(() => {
             console.log('✅ Video reproduciéndose con audio');
+            setIsLoading(false);
+
+            // Notificar que el cambio se completó
+            if (socketRef.current) {
+              socketRef.current.emit('avatar-change-complete', {
+                avatarId: newState.avatarId,
+                voiceId: newState.voiceId
+              });
+              socketRef.current.emit('avatar-ready');
+            }
+
+            isChangingAvatar.current = false;
           }).catch(err => {
             console.log('⚠️ Error en autoplay:', err);
+            setIsLoading(false);
+            isChangingAvatar.current = false;
           });
-          setIsLoading(false);
         }
       });
 
       avatarInstance.on(StreamingEvents.STREAM_DISCONNECTED, () => {
         console.log('⚠️ Stream desconectado');
+        if (socketRef.current) {
+          socketRef.current.emit('error', { message: 'Stream desconectado' });
+        }
       });
 
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
@@ -216,7 +306,7 @@ const AvatarView: React.FC = () => {
         setIsSpeaking(false);
       });
 
-      // Iniciar nuevo avatar con configuración STT
+      // Iniciar nuevo avatar
       await avatarInstance.createStartAvatar({
         avatarName: newState.avatarId,
         voice: {
@@ -235,10 +325,17 @@ const AvatarView: React.FC = () => {
       console.error('❌ Error al cambiar avatar:', error);
       setError(error instanceof Error ? error.message : 'Error al cambiar avatar');
       setIsLoading(false);
+      isChangingAvatar.current = false;
+
+      // Notificar error
+      if (socketRef.current) {
+        socketRef.current.emit('error', {
+          message: error instanceof Error ? error.message : 'Error al cambiar avatar'
+        });
+      }
     }
   };
 
-  // Handlers para eventos desde el panel de control
   const handleStartVoiceChat = async () => {
     const currentAvatar = avatarRef.current;
     console.log('🎤 handleStartVoiceChat llamado');
@@ -247,6 +344,9 @@ const AvatarView: React.FC = () => {
 
     if (!currentAvatar) {
       console.error('❌ No hay avatar disponible para chat de voz');
+      if (socketRef.current) {
+        socketRef.current.emit('error', { message: 'No hay avatar disponible' });
+      }
       return;
     }
 
@@ -257,7 +357,17 @@ const AvatarView: React.FC = () => {
 
     try {
       // Verificar permisos de micrófono primero
-      console.log('🎤 Solicitando permisos de micrófono...');
+      console.log('🎤 Verificando permisos de micrófono...');
+
+      const permissionStatus = await navigator.permissions.query({
+        name: 'microphone' as PermissionName
+      });
+
+      if (permissionStatus.state === 'denied') {
+        throw new Error('Permiso de micrófono denegado. Por favor, habilita el micrófono en la configuración de tu navegador.');
+      }
+
+      console.log('🎤 Solicitando acceso al micrófono...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Permisos de micrófono concedidos');
 
@@ -269,9 +379,21 @@ const AvatarView: React.FC = () => {
       console.log('🎤 Resultado de startVoiceChat():', result);
       setIsListening(true);
       console.log('✅ Chat de voz iniciado correctamente');
+
+      // Notificar al servidor
+      if (socketRef.current) {
+        socketRef.current.emit('voice-chat-started');
+      }
     } catch (error) {
       console.error('❌ Error en chat de voz:', error);
       setError(error instanceof Error ? error.message : 'Error en chat de voz');
+
+      // Notificar error
+      if (socketRef.current) {
+        socketRef.current.emit('error', {
+          message: error instanceof Error ? error.message : 'Error en chat de voz'
+        });
+      }
     }
   };
 
@@ -283,8 +405,22 @@ const AvatarView: React.FC = () => {
       console.log('🛑 Deteniendo chat de voz...');
       await currentAvatar.closeVoiceChat();
       setIsListening(false);
+      console.log('✅ Chat de voz detenido');
+
+      // Notificar al servidor
+      if (socketRef.current) {
+        socketRef.current.emit('voice-chat-stopped');
+      }
     } catch (error) {
       console.error('❌ Error al detener chat de voz:', error);
+      setError(error instanceof Error ? error.message : 'Error al detener chat de voz');
+
+      // Notificar error
+      if (socketRef.current) {
+        socketRef.current.emit('error', {
+          message: error instanceof Error ? error.message : 'Error al detener chat de voz'
+        });
+      }
     }
   };
 
@@ -296,11 +432,17 @@ const AvatarView: React.FC = () => {
 
     if (!currentAvatar) {
       console.error('❌ No hay instancia de avatar disponible');
+      if (socketRef.current) {
+        socketRef.current.emit('error', { message: 'No hay avatar disponible' });
+      }
       return;
     }
 
     if (!data.text.trim()) {
       console.error('❌ Texto vacío');
+      if (socketRef.current) {
+        socketRef.current.emit('error', { message: 'Texto vacío' });
+      }
       return;
     }
 
@@ -312,9 +454,21 @@ const AvatarView: React.FC = () => {
         taskMode: TaskMode.SYNC
       });
       console.log('✅ Texto enviado correctamente:', response);
+
+      // Notificar al servidor
+      if (socketRef.current) {
+        socketRef.current.emit('text-spoken');
+      }
     } catch (error) {
       console.error('❌ Error al enviar texto:', error);
       setError(error instanceof Error ? error.message : 'Error al enviar texto');
+
+      // Notificar error
+      if (socketRef.current) {
+        socketRef.current.emit('error', {
+          message: error instanceof Error ? error.message : 'Error al enviar texto'
+        });
+      }
     }
   };
 
@@ -340,8 +494,9 @@ const AvatarView: React.FC = () => {
       backgroundColor: '#1a1a1a',
       position: 'relative'
     }}>
+      {/* Indicador de carga */}
       {isLoading && (
-        <div style={{ 
+        <div style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
@@ -349,14 +504,14 @@ const AvatarView: React.FC = () => {
           textAlign: 'center',
           zIndex: 10
         }}>
-          <div style={{ 
-            color: 'white', 
+          <div style={{
+            color: 'white',
             fontSize: '24px',
             marginBottom: '20px'
           }}>
             ⏳ Cargando avatar...
           </div>
-          <div style={{ 
+          <div style={{
             width: '50px',
             height: '50px',
             border: '4px solid rgba(255,255,255,0.3)',
@@ -367,7 +522,8 @@ const AvatarView: React.FC = () => {
           }} />
         </div>
       )}
-      
+
+      {/* Mensajes de error */}
       {error && (
         <div style={{
           position: 'absolute',
@@ -380,12 +536,68 @@ const AvatarView: React.FC = () => {
           borderRadius: '8px',
           zIndex: 20,
           maxWidth: '80%',
-          textAlign: 'center'
+          textAlign: 'center',
+          animation: 'slideDown 0.3s ease-out'
         }}>
           ❌ {error}
         </div>
       )}
 
+      {/* Indicadores de estado */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        right: '20px',
+        zIndex: 15,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        alignItems: 'flex-end'
+      }}>
+        {/* Indicador de micrófono activo */}
+        {isListening && (
+          <div style={{
+            padding: '10px 20px',
+            backgroundColor: 'rgba(40, 167, 69, 0.9)',
+            color: 'white',
+            borderRadius: '25px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}>
+            <span style={{
+              width: '10px',
+              height: '10px',
+              backgroundColor: 'white',
+              borderRadius: '50%',
+              animation: 'pulse 1s ease-in-out infinite'
+            }}></span>
+            🎤 Micrófono Activo
+          </div>
+        )}
+
+        {/* Indicador de avatar hablando */}
+        {isSpeaking && (
+          <div style={{
+            padding: '10px 20px',
+            backgroundColor: 'rgba(102, 126, 234, 0.9)',
+            color: 'white',
+            borderRadius: '25px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            🗣️ Avatar Hablando
+          </div>
+        )}
+      </div>
+
+      {/* Botón de inicio */}
       {showAudioButton && !isLoading && !avatar && (
         <div style={{
           position: 'absolute',
@@ -431,6 +643,7 @@ const AvatarView: React.FC = () => {
         </div>
       )}
 
+      {/* Video del avatar */}
       <video
         ref={videoRef}
         style={{
@@ -444,14 +657,33 @@ const AvatarView: React.FC = () => {
         muted={false}
       />
 
+      {/* Animaciones CSS */}
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.7;
+            transform: scale(0.95);
+          }
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
         }
       `}</style>
     </div>

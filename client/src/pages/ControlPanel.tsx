@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface AvatarConfig {
@@ -8,15 +8,22 @@ interface AvatarConfig {
   description: string;
 }
 
-// Configuraciones iniciales movidas al estado
+interface StatusMessage {
+  type: 'success' | 'error' | 'info';
+  message: string;
+  timestamp: number;
+}
 
 const ControlPanel: React.FC = () => {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [currentAvatar, setCurrentAvatar] = useState<string>('Dexter_Doctor_Standing2_public');
+  const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [currentAvatar, setCurrentAvatar] = useState<string>('Dexter_Doctor_Standing2_public');
+  const [isAvatarReady, setIsAvatarReady] = useState(false);
+  const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const [lastChange, setLastChange] = useState<string>('');
   const [isListening, setIsListening] = useState(false);
   const [textInput, setTextInput] = useState<string>('');
+  const [statusMessages, setStatusMessages] = useState<StatusMessage[]>([]);
 
   // Estados editables para los avatares
   const [avatarConfigs, setAvatarConfigs] = useState<AvatarConfig[]>([
@@ -35,95 +42,200 @@ const ControlPanel: React.FC = () => {
   ]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
-    const socketInstance = io(serverUrl);
-    setSocket(socketInstance);
+  // Función para agregar mensajes de estado
+  const addStatusMessage = useCallback((type: 'success' | 'error' | 'info', message: string) => {
+    const newMessage: StatusMessage = {
+      type,
+      message,
+      timestamp: Date.now()
+    };
 
+    setStatusMessages(prev => {
+      // Mantener solo los últimos 5 mensajes
+      const updated = [...prev, newMessage].slice(-5);
+      return updated;
+    });
+  }, []);
+
+  // Inicialización del socket
+  useEffect(() => {
+    // Evitar múltiples conexiones
+    if (socketRef.current) return;
+
+    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+
+    const socketInstance = io(serverUrl, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    socketRef.current = socketInstance;
+
+    // Eventos de conexión
     socketInstance.on('connect', () => {
       setIsConnected(true);
+      addStatusMessage('success', '🟢 Conectado al servidor');
       console.log('✅ Conectado al servidor');
     });
 
     socketInstance.on('disconnect', () => {
       setIsConnected(false);
+      setIsAvatarReady(false);
+      addStatusMessage('error', '🔴 Desconectado del servidor');
       console.log('⚠️ Desconectado del servidor');
     });
 
+    socketInstance.on('connect_error', (error) => {
+      addStatusMessage('error', '❌ Error de conexión');
+      console.error('❌ Error de conexión:', error);
+    });
+
+    // Eventos del avatar
     socketInstance.on('avatar-state', (state) => {
       console.log('📊 Estado recibido:', state);
       setCurrentAvatar(state.avatarId);
     });
 
-    socketInstance.on('connect_error', (error) => {
-      console.error('❌ Error de conexión:', error);
+    socketInstance.on('avatar-ready', () => {
+      setIsAvatarReady(true);
+      setIsChangingAvatar(false);
+      addStatusMessage('success', '✅ Avatar listo');
+      console.log('✅ Avatar listo');
     });
 
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, []);
+    socketInstance.on('avatar-change-start', () => {
+      setIsChangingAvatar(true);
+      setIsAvatarReady(false);
+      addStatusMessage('info', '🔄 Cambiando avatar...');
+      console.log('🔄 Inicio del cambio de avatar');
+    });
 
-  const changeAvatar = (config: AvatarConfig) => {
-    if (socket && isConnected) {
-      console.log('🔄 Cambiando avatar a:', config.name);
-      socket.emit('change-avatar', {
-        avatarId: config.avatarId,
-        voiceId: config.voiceId
-      });
-      setCurrentAvatar(config.avatarId);
-      setLastChange(new Date().toLocaleTimeString('es-ES'));
+    socketInstance.on('avatar-change-complete', (data) => {
+      setIsChangingAvatar(false);
+      setIsAvatarReady(true);
+      addStatusMessage('success', `✅ Avatar cambiado exitosamente`);
+      console.log('✅ Cambio de avatar completado:', data);
+    });
+
+    socketInstance.on('voice-chat-started', () => {
+      setIsListening(true);
+      addStatusMessage('success', '🎤 Chat de voz iniciado');
+      console.log('✅ Confirmación: Chat de voz iniciado');
+    });
+
+    socketInstance.on('voice-chat-stopped', () => {
+      setIsListening(false);
+      addStatusMessage('info', '🛑 Chat de voz detenido');
+      console.log('✅ Confirmación: Chat de voz detenido');
+    });
+
+    socketInstance.on('text-spoken', () => {
+      addStatusMessage('success', '✅ Texto enviado correctamente');
+      console.log('✅ Confirmación: Texto enviado');
+    });
+
+    socketInstance.on('error', (error) => {
+      addStatusMessage('error', `❌ Error: ${error.message}`);
+      console.error('❌ Error del servidor:', error);
+    });
+
+    // Limpieza al desmontar
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [addStatusMessage]);
+
+  // Validación antes de acciones
+  const validateAction = (actionName: string): boolean => {
+    if (!socketRef.current) {
+      addStatusMessage('error', '❌ Socket no disponible');
+      console.error('❌ Socket no disponible');
+      return false;
     }
+
+    if (!isConnected) {
+      addStatusMessage('error', '❌ No conectado al servidor');
+      console.error('❌ No conectado al servidor');
+      return false;
+    }
+
+    if (!isAvatarReady && actionName !== 'change-avatar') {
+      addStatusMessage('error', '❌ Avatar no está listo');
+      console.error('❌ Avatar no está listo');
+      return false;
+    }
+
+    if (isChangingAvatar) {
+      addStatusMessage('error', '⚠️ Cambio de avatar en progreso');
+      console.error('⚠️ Cambio de avatar en progreso');
+      return false;
+    }
+
+    return true;
   };
 
-  const getCurrentAvatarName = () => {
-    const config = avatarConfigs.find(c => c.avatarId === currentAvatar);
-    return config ? config.name : 'Desconocido';
+  const changeAvatar = (config: AvatarConfig) => {
+    if (!socketRef.current || !isConnected) {
+      addStatusMessage('error', '❌ No se puede cambiar el avatar');
+      return;
+    }
+
+    if (isChangingAvatar) {
+      addStatusMessage('error', '⚠️ Ya hay un cambio en progreso');
+      return;
+    }
+
+    if (currentAvatar === config.avatarId) {
+      addStatusMessage('info', 'ℹ️ Este avatar ya está activo');
+      return;
+    }
+
+    console.log('🔄 Cambiando avatar a:', config.name);
+    addStatusMessage('info', `🔄 Cambiando a ${config.name}...`);
+
+    socketRef.current.emit('change-avatar', {
+      avatarId: config.avatarId,
+      voiceId: config.voiceId
+    });
+
+    setCurrentAvatar(config.avatarId);
+    setLastChange(new Date().toLocaleTimeString('es-ES'));
+    setIsChangingAvatar(true);
+    setIsAvatarReady(false);
   };
 
   const handleStartVoiceChat = () => {
-    if (!socket) {
-      console.error('❌ Socket no disponible');
-      return;
-    }
-    if (!isConnected) {
-      console.error('❌ No conectado al servidor');
-      return;
-    }
+    if (!validateAction('start-voice-chat')) return;
+
     console.log('🎤 [PANEL] Emitiendo evento: start-voice-chat');
-    socket.emit('start-voice-chat');
-    setIsListening(true);
+    addStatusMessage('info', '🎤 Iniciando chat de voz...');
+    socketRef.current!.emit('start-voice-chat');
   };
 
   const handleStopVoiceChat = () => {
-    if (!socket) {
-      console.error('❌ Socket no disponible');
-      return;
-    }
-    if (!isConnected) {
-      console.error('❌ No conectado al servidor');
-      return;
-    }
+    if (!validateAction('stop-voice-chat')) return;
+
     console.log('🛑 [PANEL] Emitiendo evento: stop-voice-chat');
-    socket.emit('stop-voice-chat');
-    setIsListening(false);
+    addStatusMessage('info', '🛑 Deteniendo chat de voz...');
+    socketRef.current!.emit('stop-voice-chat');
   };
 
   const handleSendText = () => {
-    if (!socket) {
-      console.error('❌ Socket no disponible');
-      return;
-    }
-    if (!isConnected) {
-      console.error('❌ No conectado al servidor');
-      return;
-    }
+    if (!validateAction('speak-text')) return;
+
     if (!textInput.trim()) {
+      addStatusMessage('error', '❌ El texto no puede estar vacío');
       console.error('❌ Texto vacío');
       return;
     }
+
     console.log('📝 [PANEL] Emitiendo evento: speak-text con texto:', textInput);
-    socket.emit('speak-text', { text: textInput });
+    addStatusMessage('info', '📝 Enviando texto...');
+    socketRef.current!.emit('speak-text', { text: textInput });
     setTextInput('');
   };
 
@@ -133,45 +245,42 @@ const ControlPanel: React.FC = () => {
     setAvatarConfigs(newConfigs);
   };
 
+  const getCurrentAvatarName = () => {
+    const config = avatarConfigs.find(c => c.avatarId === currentAvatar);
+    return config ? config.name : 'Desconocido';
+  };
+
   const isDoctorDexter = currentAvatar === 'Dexter_Doctor_Standing2_public';
   const isCEOAnn = currentAvatar === 'Ann_Therapist_public';
 
   return (
-    <div style={{ 
+    <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       padding: '20px'
     }}>
-      <div style={{ 
-        maxWidth: '800px', 
+      <div style={{
+        maxWidth: '800px',
         margin: '0 auto',
         backgroundColor: 'white',
         borderRadius: '20px',
         padding: '40px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
-        <h1 style={{ 
+        <h1 style={{
           textAlign: 'center',
           color: '#333',
           marginBottom: '10px',
           fontSize: '32px',
           fontWeight: 'bold'
         }}>
-            Avatar - Padcelona
+          Avatar - Padcelona
         </h1>
-        <p style={{
-          textAlign: 'center',
-          color: '#666',
-          marginBottom: '30px',
-          fontSize: '16px'
-        }}>
 
-        </p>
-        
         {/* Estado de conexión */}
-        <div style={{ 
-          marginBottom: '30px', 
-          padding: '20px', 
+        <div style={{
+          marginBottom: '20px',
+          padding: '20px',
           backgroundColor: isConnected ? '#d4edda' : '#f8d7da',
           borderRadius: '10px',
           border: `2px solid ${isConnected ? '#28a745' : '#dc3545'}`,
@@ -183,6 +292,11 @@ const ControlPanel: React.FC = () => {
             <strong style={{ fontSize: '18px' }}>
               {isConnected ? '🟢 Conectado' : '🔴 Desconectado'}
             </strong>
+            {isConnected && (
+              <div style={{ fontSize: '14px', color: '#666', marginTop: '5px' }}>
+                Avatar: {isAvatarReady ? '✅ Listo' : isChangingAvatar ? '🔄 Cambiando...' : '⏳ Cargando...'}
+              </div>
+            )}
             {isConnected && lastChange && (
               <div style={{ fontSize: '14px', color: '#666', marginTop: '5px' }}>
                 Último cambio: {lastChange}
@@ -191,8 +305,42 @@ const ControlPanel: React.FC = () => {
           </div>
         </div>
 
+        {/* Sistema de mensajes de estado */}
+        {statusMessages.length > 0 && (
+          <div style={{
+            marginBottom: '20px',
+            maxHeight: '120px',
+            overflowY: 'auto'
+          }}>
+            {statusMessages.map((msg, index) => (
+              <div
+                key={msg.timestamp}
+                style={{
+                  padding: '10px 15px',
+                  marginBottom: '5px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  backgroundColor:
+                    msg.type === 'success' ? '#d4edda' :
+                    msg.type === 'error' ? '#f8d7da' : '#d1ecf1',
+                  color:
+                    msg.type === 'success' ? '#155724' :
+                    msg.type === 'error' ? '#721c24' : '#0c5460',
+                  border: `1px solid ${
+                    msg.type === 'success' ? '#c3e6cb' :
+                    msg.type === 'error' ? '#f5c6cb' : '#bee5eb'
+                  }`,
+                  animation: 'fadeIn 0.3s ease-in'
+                }}
+              >
+                {msg.message}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Avatar actual */}
-        <div style={{ 
+        <div style={{
           marginBottom: '30px',
           padding: '20px',
           backgroundColor: '#f8f9fa',
@@ -208,14 +356,14 @@ const ControlPanel: React.FC = () => {
         </div>
 
         {/* Selector de avatares */}
-        <h2 style={{ 
+        <h2 style={{
           color: '#333',
           marginBottom: '20px',
           fontSize: '24px'
         }}>
           Seleccionar Avatar
         </h2>
-        
+
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
@@ -223,7 +371,7 @@ const ControlPanel: React.FC = () => {
         }}>
           {avatarConfigs.map((config, index) => {
             const isActive = currentAvatar === config.avatarId;
-            const isDisabled = !isConnected || isActive;
+            const isDisabled = !isConnected || isActive || isChangingAvatar || !isAvatarReady;
             const isEditing = editingIndex === index;
 
             return (
@@ -340,7 +488,7 @@ const ControlPanel: React.FC = () => {
         </div>
 
         {/* Controles específicos del avatar */}
-        {isConnected && (
+        {isConnected && isAvatarReady && !isChangingAvatar && (
           <div style={{
             marginTop: '40px',
             padding: '25px',
@@ -396,7 +544,8 @@ const ControlPanel: React.FC = () => {
                     color: '#28a745',
                     marginTop: '15px',
                     fontSize: '16px',
-                    fontWeight: '500'
+                    fontWeight: '500',
+                    animation: 'pulse 2s ease-in-out infinite'
                   }}>
                     🎙️ El micrófono está activo. Habla con el doctor en la vista del avatar.
                   </p>
@@ -500,10 +649,33 @@ const ControlPanel: React.FC = () => {
             margin: 0
           }}>
             <li>Abre la vista del avatar en otra pestaña o navegador</li>
-              <li><a href="https://heygen-avatar-client.onrender.com" target="_blank">https://heygen-avatar-client.onrender.com</a> </li>
+            <li><a href="https://heygen-avatar-client.onrender.com" target="_blank" rel="noopener noreferrer">https://heygen-avatar-client.onrender.com</a></li>
           </ul>
         </div>
       </div>
+
+      {/* Animaciones CSS */}
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.6;
+          }
+        }
+      `}</style>
     </div>
   );
 };
