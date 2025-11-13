@@ -8,7 +8,20 @@ interface AvatarConfig {
   description: string;
 }
 
-// Configuraciones iniciales movidas al estado
+const avatarConfigs: AvatarConfig[] = [
+  {
+    name: '👨‍⚕️ Doctor Dexter',
+    avatarId: 'Dexter_Doctor_Standing2_public',
+    voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
+    description: 'Avatar médico profesional'
+  },
+  {
+    name: '👔 CEO Ann',
+    avatarId: 'Ann_Therapist_public',
+    voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
+    description: 'Avatar ejecutivo empresarial'
+  }
+];
 
 const ControlPanel: React.FC = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -216,125 +229,72 @@ const ControlPanel: React.FC = () => {
           Seleccionar Avatar
         </h2>
         
-        <div style={{
+        <div style={{ 
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
           gap: '20px'
         }}>
-          {avatarConfigs.map((config, index) => {
+          {avatarConfigs.map((config) => {
             const isActive = currentAvatar === config.avatarId;
             const isDisabled = !isConnected || isActive;
-            const isEditing = editingIndex === index;
-
+            
             return (
-              <div key={index} style={{
-                padding: '20px',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '15px',
-                border: isActive ? '3px solid #28a745' : '2px solid #e9ecef'
-              }}>
-                {/* Título y botón de editar */}
-                <div style={{
+              <button
+                key={config.avatarId}
+                onClick={() => changeAvatar(config)}
+                disabled={isDisabled}
+                style={{
+                  padding: '25px',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  backgroundColor: isActive ? '#28a745' : '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '15px',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  opacity: isDisabled ? 0.6 : 1,
+                  transition: 'all 0.3s ease',
+                  boxShadow: isActive 
+                    ? '0 8px 16px rgba(40, 167, 69, 0.3)' 
+                    : '0 8px 16px rgba(102, 126, 234, 0.3)',
+                  transform: isActive ? 'scale(1.05)' : 'scale(1)',
                   display: 'flex',
-                  justifyContent: 'space-between',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  marginBottom: '15px'
-                }}>
-                  <h3 style={{ margin: 0, fontSize: '20px', color: '#333' }}>{config.name}</h3>
-                  <button
-                    onClick={() => setEditingIndex(isEditing ? null : index)}
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '14px',
-                      backgroundColor: isEditing ? '#dc3545' : '#667eea',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {isEditing ? '✓ Cerrar' : '✏️ Editar'}
-                  </button>
+                  gap: '10px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDisabled) {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(102, 126, 234, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(102, 126, 234, 0.3)';
+                  }
+                }}
+              >
+                <div style={{ fontSize: '24px' }}>
+                  {config.name}
                 </div>
-
-                {/* Campos editables */}
-                {isEditing && (
-                  <div style={{ marginBottom: '15px', backgroundColor: 'white', padding: '15px', borderRadius: '8px' }}>
-                    <div style={{ marginBottom: '10px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
-                        Avatar ID:
-                      </label>
-                      <input
-                        type="text"
-                        value={config.avatarId}
-                        onChange={(e) => updateAvatarConfig(index, 'avatarId', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          fontSize: '14px',
-                          border: '2px solid #667eea',
-                          borderRadius: '5px',
-                          boxSizing: 'border-box',
-                          fontFamily: 'monospace'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
-                        Voice ID:
-                      </label>
-                      <input
-                        type="text"
-                        value={config.voiceId}
-                        onChange={(e) => updateAvatarConfig(index, 'voiceId', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          fontSize: '14px',
-                          border: '2px solid #667eea',
-                          borderRadius: '5px',
-                          boxSizing: 'border-box',
-                          fontFamily: 'monospace'
-                        }}
-                      />
-                    </div>
+                <div style={{ 
+                  fontSize: '14px', 
+                  opacity: 0.9,
+                  fontWeight: 'normal'
+                }}>
+                  {config.description}
+                </div>
+                {isActive && (
+                  <div style={{ 
+                    fontSize: '20px',
+                    marginTop: '5px'
+                  }}>
+                    ✓ Activo
                   </div>
                 )}
-
-                {/* Botón del avatar */}
-                <button
-                  onClick={() => changeAvatar(config)}
-                  disabled={isDisabled}
-                  style={{
-                    width: '100%',
-                    padding: '20px',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    backgroundColor: isActive ? '#28a745' : '#667eea',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '10px',
-                    cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    opacity: isDisabled ? 0.6 : 1,
-                    transition: 'all 0.3s ease',
-                    boxShadow: isActive
-                      ? '0 8px 16px rgba(40, 167, 69, 0.3)'
-                      : '0 8px 16px rgba(102, 126, 234, 0.3)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isDisabled) {
-                      e.currentTarget.style.transform = 'scale(1.02)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  <div>{config.description}</div>
-                  {isActive && <div style={{ marginTop: '10px', fontSize: '16px' }}>✓ Activo</div>}
-                </button>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -365,7 +325,7 @@ const ControlPanel: React.FC = () => {
                   marginBottom: '15px',
                   fontSize: '18px'
                 }}>
-                  Chat de Voz con Doctor Dexter
+                  👨‍⚕️ Chat de Voz con Doctor Dexter
                 </h3>
                 <button
                   onClick={isListening ? handleStopVoiceChat : handleStartVoiceChat}
@@ -413,7 +373,7 @@ const ControlPanel: React.FC = () => {
                   fontSize: '18px',
                   textAlign: 'center'
                 }}>
-                  Texto a Voz con CEO Ann
+                  👔 Texto a Voz con CEO Ann
                 </h3>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input
