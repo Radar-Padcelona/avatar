@@ -19,6 +19,7 @@ const AvatarView: React.FC = () => {
   const [showAudioButton, setShowAudioButton] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
   const [backgroundUrl, setBackgroundUrl] = useState<string>('');
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1' | '4:3'>('16:9');
   const [pendingVoiceChatRequest, setPendingVoiceChatRequest] = useState(false);
   const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullTextRef = useRef<string>('');
@@ -27,6 +28,17 @@ const AvatarView: React.FC = () => {
   const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
                       /Safari/.test(navigator.userAgent) &&
                       !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
+
+  // Función para calcular las dimensiones del contenedor según el aspect ratio
+  const getAspectRatioStyles = (ratio: '16:9' | '9:16' | '1:1' | '4:3') => {
+    const ratios = {
+      '16:9': { paddingTop: '56.25%' },  // 9/16 * 100
+      '9:16': { paddingTop: '177.78%' }, // 16/9 * 100
+      '1:1': { paddingTop: '100%' },     // 1/1 * 100
+      '4:3': { paddingTop: '75%' }       // 3/4 * 100
+    };
+    return ratios[ratio];
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -216,6 +228,7 @@ const AvatarView: React.FC = () => {
       const avatarState = await stateResponse.json();
       setCurrentAvatarId(avatarState.avatarId);
       setBackgroundUrl(avatarState.backgroundUrl || '');
+      setAspectRatio(avatarState.aspectRatio || '16:9');
 
       // Crear instancia del avatar
       console.log('🎭 Creando instancia del avatar...');
@@ -274,6 +287,16 @@ const AvatarView: React.FC = () => {
       // Iniciar avatar
       console.log(`🚀 Iniciando avatar: ${avatarState.avatarId}`);
       console.log(`🧠 Knowledge Base: ${avatarState.knowledgeBase}`);
+      console.log(`🎥 Calidad: ${avatarState.quality || 'high'}`);
+
+      // Mapear calidad del servidor a enum de HeyGen
+      const qualityMap: { [key: string]: AvatarQuality } = {
+        'low': AvatarQuality.Low,
+        'medium': AvatarQuality.Medium,
+        'high': AvatarQuality.High
+      };
+      const quality = qualityMap[(avatarState as any).quality || 'high'] || AvatarQuality.High;
+
       await avatarInstance.createStartAvatar({
         avatarName: avatarState.avatarId,
         voice: {
@@ -281,7 +304,7 @@ const AvatarView: React.FC = () => {
           rate: 1.0,
           emotion: VoiceEmotion.FRIENDLY
         },
-        quality: AvatarQuality.High,
+        quality: quality,
         language: 'es',
         knowledgeBase: avatarState.knowledgeBase || 'Eres un asistente útil y amigable.'
       });
@@ -300,7 +323,7 @@ const AvatarView: React.FC = () => {
     }
   };
 
-  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string }) => {
+  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string; quality?: string; aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' }) => {
     // Prevenir cambios concurrentes
     if (isChangingAvatar.current) {
       console.log('⚠️ Ya hay un cambio de avatar en proceso');
@@ -409,6 +432,16 @@ const AvatarView: React.FC = () => {
       // Iniciar nuevo avatar
       console.log(`🚀 Iniciando nuevo avatar: ${newState.avatarId}`);
       console.log(`🧠 Nuevo Knowledge Base: ${newState.knowledgeBase}`);
+      console.log(`🎥 Nueva Calidad: ${newState.quality || 'high'}`);
+
+      // Mapear calidad del servidor a enum de HeyGen
+      const qualityMap: { [key: string]: AvatarQuality } = {
+        'low': AvatarQuality.Low,
+        'medium': AvatarQuality.Medium,
+        'high': AvatarQuality.High
+      };
+      const quality = qualityMap[newState.quality || 'high'] || AvatarQuality.High;
+
       await avatarInstance.createStartAvatar({
         avatarName: newState.avatarId,
         voice: {
@@ -416,13 +449,14 @@ const AvatarView: React.FC = () => {
           rate: 1.0,
           emotion: VoiceEmotion.FRIENDLY
         },
-        quality: AvatarQuality.High,
+        quality: quality,
         language: 'es',
         knowledgeBase: newState.knowledgeBase || 'Eres un asistente útil y amigable.'
       });
 
       setCurrentAvatarId(newState.avatarId);
       setBackgroundUrl(newState.backgroundUrl || '');
+      setAspectRatio(newState.aspectRatio || '16:9');
 
     } catch (error) {
       console.error('❌ Error al cambiar avatar:', error);
@@ -859,19 +893,39 @@ const AvatarView: React.FC = () => {
         </div>
       )}
 
-      {/* Video del avatar */}
-      <video
-        ref={videoRef}
-        style={{
+      {/* Contenedor de video con aspect ratio */}
+      <div style={{
+        position: 'relative',
+        width: aspectRatio === '9:16' ? '40%' : aspectRatio === '1:1' ? '60%' : '80%',
+        maxWidth: aspectRatio === '9:16' ? '400px' : aspectRatio === '1:1' ? '600px' : '1200px',
+        margin: '0 auto',
+        display: isLoading ? 'none' : 'block'
+      }}>
+        <div style={{
+          position: 'relative',
           width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          display: isLoading ? 'none' : 'block'
-        }}
-        autoPlay
-        playsInline
-        muted={false}
-      />
+          paddingTop: getAspectRatioStyles(aspectRatio).paddingTop,
+          backgroundColor: '#000',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
+        }}>
+          <video
+            ref={videoRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover'
+            }}
+            autoPlay
+            playsInline
+            muted={false}
+          />
+        </div>
+      </div>
 
       {/* Animaciones CSS */}
       <style>{`

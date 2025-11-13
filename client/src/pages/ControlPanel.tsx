@@ -8,6 +8,8 @@ interface AvatarConfig {
   description: string;
   knowledgeBase: string;
   backgroundUrl?: string;
+  quality?: 'low' | 'medium' | 'high';
+  aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3';
 }
 
 interface StatusMessage {
@@ -38,7 +40,9 @@ const ControlPanel: React.FC = () => {
       knowledgeBase: 'Jefe de Clientes Globales y Excelencia en Tecnologías de Fertilidad en la Franquicia Global de Fertilidad, Boston, Massachusetts. Treinta y tres años de experiencia combinada en tecnologías reproductivas avanzadas (TRA), tanto en humanos como en animales. Veinte años gestionando su propio negocio de TRA en Sudamérica, desarrolló cinco laboratorios exitosos en Tecnologías Reproductivas Avanzadas y transfirió más de 3000 embriones al año. Veintitrés años de experiencia en TRA humana y en la industria biofarmacéutica, siete años en EE. UU. y dieciséis años a nivel mundial. Tienes un doctorado en Medicina Veterinaria por la Universidad de Buenos Aires, una beca en Ciencia Animal por la Universidad de Davis, un máster en Embriología Humana y Andrología por el Instituto Jones de la Facultad de Medicina de Virginia Oriental y una beca ejecutiva por el Babson College de Boston\n' +
           '\n' +
           'Responde de manera MUY CONCISA en español o en el idioma que te indiquen en cada momento, máximo 2-3 oraciones. Tus respuestas serán leídas en voz alta por un avatar, así que deben ser naturales para hablar (evita usar emojis, asteriscos o formato especial). Sé breve, directo y amigable.',
-      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png'
+      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+      quality: 'high',
+      aspectRatio: '16:9'
     },
     {
       name: '👔 CEO Ann',
@@ -46,7 +50,9 @@ const ControlPanel: React.FC = () => {
       voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
       description: 'Avatar ejecutivo empresarial',
       knowledgeBase: 'Eres un experto en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
-      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png'
+      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+      quality: 'high',
+      aspectRatio: '16:9'
     }
   ]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -220,7 +226,9 @@ const ControlPanel: React.FC = () => {
       avatarId: config.avatarId,
       voiceId: config.voiceId,
       knowledgeBase: config.knowledgeBase,
-      backgroundUrl: config.backgroundUrl
+      backgroundUrl: config.backgroundUrl,
+      quality: config.quality || 'high',
+      aspectRatio: config.aspectRatio || '16:9'
     });
 
     setCurrentAvatar(config.avatarId);
@@ -265,9 +273,15 @@ const ControlPanel: React.FC = () => {
     setTextInput('');
   };
 
-  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase' | 'backgroundUrl', value: string) => {
+  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase' | 'backgroundUrl' | 'quality' | 'aspectRatio', value: string) => {
     const newConfigs = [...avatarConfigs];
-    newConfigs[index][field] = value;
+    if (field === 'quality') {
+      newConfigs[index][field] = value as 'low' | 'medium' | 'high';
+    } else if (field === 'aspectRatio') {
+      newConfigs[index][field] = value as '16:9' | '9:16' | '1:1' | '4:3';
+    } else {
+      newConfigs[index][field] = value;
+    }
     setAvatarConfigs(newConfigs);
   };
 
@@ -497,7 +511,7 @@ const ControlPanel: React.FC = () => {
                         💡 Cambia el "cerebro" del avatar en tiempo real. Define su personalidad y área de expertise.
                       </div>
                     </div>
-                    <div>
+                    <div style={{ marginBottom: '10px' }}>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
                         🖼️ Background URL (Fondo de Escenario):
                       </label>
@@ -518,6 +532,61 @@ const ControlPanel: React.FC = () => {
                       />
                       <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
                         🏢 URL de imagen para el fondo (oficina, sala de juntas, etc.)
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
+                        🎥 Calidad de Video:
+                      </label>
+                      <select
+                        value={config.quality || 'high'}
+                        onChange={(e) => updateAvatarConfig(index, 'quality', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          fontSize: '14px',
+                          border: '2px solid #667eea',
+                          borderRadius: '5px',
+                          boxSizing: 'border-box',
+                          backgroundColor: 'white',
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                      >
+                        <option value="high">🔥 Alta (High) - Mejor calidad</option>
+                        <option value="medium">⚡ Media (Medium) - Balanceada</option>
+                        <option value="low">💨 Baja (Low) - Más rápida</option>
+                      </select>
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
+                        📊 Mayor calidad = mejor imagen pero más ancho de banda
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
+                        📐 Relación de Aspecto (Aspect Ratio):
+                      </label>
+                      <select
+                        value={config.aspectRatio || '16:9'}
+                        onChange={(e) => updateAvatarConfig(index, 'aspectRatio', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          fontSize: '14px',
+                          border: '2px solid #667eea',
+                          borderRadius: '5px',
+                          boxSizing: 'border-box',
+                          backgroundColor: 'white',
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                      >
+                        <option value="16:9">📺 16:9 (Horizontal / Panorámico)</option>
+                        <option value="9:16">📱 9:16 (Vertical / Stories)</option>
+                        <option value="1:1">⬜ 1:1 (Cuadrado / Instagram)</option>
+                        <option value="4:3">🖥️ 4:3 (Estándar / Clásico)</option>
+                      </select>
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
+                        ⚠️ Nota: La proporción se simula con CSS (puede recortar el video)
                       </div>
                     </div>
                   </div>

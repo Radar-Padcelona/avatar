@@ -24,6 +24,8 @@ interface AvatarState {
   voiceId: string;
   knowledgeBase: string;
   backgroundUrl?: string;
+  quality?: 'low' | 'medium' | 'high';
+  aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3';
   ready: boolean;
 }
 
@@ -33,6 +35,8 @@ let currentAvatarState: AvatarState = {
   voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
   knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.',
   backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+  quality: 'high',
+  aspectRatio: '16:9',
   ready: false
 };
 
@@ -90,7 +94,7 @@ io.on('connection', (socket: Socket) => {
   // ==============================
 
   // Escuchar cambios de avatar desde el panel de control
-  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string }) => {
+  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string; quality?: 'low' | 'medium' | 'high'; aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' }) => {
     console.log('🔄 [SERVER] Solicitud de cambio de avatar:', newState);
 
     // Actualizar estado (marca como no listo hasta que el avatar confirme)
@@ -99,6 +103,8 @@ io.on('connection', (socket: Socket) => {
       voiceId: newState.voiceId,
       knowledgeBase: newState.knowledgeBase,
       backgroundUrl: newState.backgroundUrl,
+      quality: newState.quality || 'high',
+      aspectRatio: newState.aspectRatio || '16:9',
       ready: false
     };
 
