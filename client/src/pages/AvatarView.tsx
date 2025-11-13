@@ -187,6 +187,7 @@ const AvatarView: React.FC = () => {
 
       // Iniciar avatar
       console.log(`🚀 Iniciando avatar: ${avatarState.avatarId}`);
+      console.log(`🧠 Knowledge Base: ${avatarState.knowledgeBase}`);
       await avatarInstance.createStartAvatar({
         avatarName: avatarState.avatarId,
         voice: {
@@ -196,7 +197,7 @@ const AvatarView: React.FC = () => {
         },
         quality: AvatarQuality.High,
         language: 'es',
-        knowledgeBase: 'Eres un asistente útil y amigable.'
+        knowledgeBase: avatarState.knowledgeBase || 'Eres un asistente útil y amigable.'
       });
 
     } catch (error) {
@@ -213,7 +214,7 @@ const AvatarView: React.FC = () => {
     }
   };
 
-  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string }) => {
+  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string; knowledgeBase: string }) => {
     // Prevenir cambios concurrentes
     if (isChangingAvatar.current) {
       console.log('⚠️ Ya hay un cambio de avatar en proceso');
@@ -307,6 +308,8 @@ const AvatarView: React.FC = () => {
       });
 
       // Iniciar nuevo avatar
+      console.log(`🚀 Iniciando nuevo avatar: ${newState.avatarId}`);
+      console.log(`🧠 Nuevo Knowledge Base: ${newState.knowledgeBase}`);
       await avatarInstance.createStartAvatar({
         avatarName: newState.avatarId,
         voice: {
@@ -316,7 +319,7 @@ const AvatarView: React.FC = () => {
         },
         quality: AvatarQuality.High,
         language: 'es',
-        knowledgeBase: 'Eres un asistente útil y amigable.'
+        knowledgeBase: newState.knowledgeBase || 'Eres un asistente útil y amigable.'
       });
 
       setCurrentAvatarId(newState.avatarId);

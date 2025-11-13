@@ -6,6 +6,7 @@ interface AvatarConfig {
   avatarId: string;
   voiceId: string;
   description: string;
+  knowledgeBase: string;
 }
 
 interface StatusMessage {
@@ -31,13 +32,15 @@ const ControlPanel: React.FC = () => {
       name: '👨‍⚕️ Doctor Dexter',
       avatarId: 'Dexter_Doctor_Standing2_public',
       voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
-      description: 'Avatar médico profesional'
+      description: 'Avatar médico profesional',
+      knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.'
     },
     {
       name: '👔 CEO Ann',
       avatarId: 'Ann_Therapist_public',
       voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
-      description: 'Avatar ejecutivo empresarial'
+      description: 'Avatar ejecutivo empresarial',
+      knowledgeBase: 'Eres un experto en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.'
     }
   ]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -199,7 +202,8 @@ const ControlPanel: React.FC = () => {
 
     socketRef.current.emit('change-avatar', {
       avatarId: config.avatarId,
-      voiceId: config.voiceId
+      voiceId: config.voiceId,
+      knowledgeBase: config.knowledgeBase
     });
 
     setCurrentAvatar(config.avatarId);
@@ -239,7 +243,7 @@ const ControlPanel: React.FC = () => {
     setTextInput('');
   };
 
-  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId', value: string) => {
+  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase', value: string) => {
     const newConfigs = [...avatarConfigs];
     newConfigs[index][field] = value;
     setAvatarConfigs(newConfigs);
@@ -428,7 +432,7 @@ const ControlPanel: React.FC = () => {
                         }}
                       />
                     </div>
-                    <div>
+                    <div style={{ marginBottom: '10px' }}>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
                         Voice ID:
                       </label>
@@ -446,6 +450,30 @@ const ControlPanel: React.FC = () => {
                           fontFamily: 'monospace'
                         }}
                       />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
+                        🧠 Knowledge Base (Prompt del "Cerebro"):
+                      </label>
+                      <textarea
+                        value={config.knowledgeBase}
+                        onChange={(e) => updateAvatarConfig(index, 'knowledgeBase', e.target.value)}
+                        rows={4}
+                        placeholder="Ej: Eres un experto en finanzas..."
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          fontSize: '14px',
+                          border: '2px solid #667eea',
+                          borderRadius: '5px',
+                          boxSizing: 'border-box',
+                          fontFamily: 'inherit',
+                          resize: 'vertical'
+                        }}
+                      />
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
+                        💡 Cambia el "cerebro" del avatar en tiempo real. Define su personalidad y área de expertise.
+                      </div>
                     </div>
                   </div>
                 )}

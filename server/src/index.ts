@@ -22,6 +22,7 @@ app.use(express.json());
 interface AvatarState {
   avatarId: string;
   voiceId: string;
+  knowledgeBase: string;
   ready: boolean;
 }
 
@@ -29,6 +30,7 @@ interface AvatarState {
 let currentAvatarState: AvatarState = {
   avatarId: 'Dexter_Doctor_Standing2_public',
   voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
+  knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.',
   ready: false
 };
 
@@ -86,13 +88,14 @@ io.on('connection', (socket: Socket) => {
   // ==============================
 
   // Escuchar cambios de avatar desde el panel de control
-  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string }) => {
+  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string }) => {
     console.log('🔄 [SERVER] Solicitud de cambio de avatar:', newState);
 
     // Actualizar estado (marca como no listo hasta que el avatar confirme)
     currentAvatarState = {
       avatarId: newState.avatarId,
       voiceId: newState.voiceId,
+      knowledgeBase: newState.knowledgeBase,
       ready: false
     };
 
