@@ -7,6 +7,7 @@ interface AvatarConfig {
   voiceId: string;
   description: string;
   knowledgeBase: string;
+  backgroundUrl?: string;
 }
 
 interface StatusMessage {
@@ -23,6 +24,7 @@ const ControlPanel: React.FC = () => {
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const [lastChange, setLastChange] = useState<string>('');
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [textInput, setTextInput] = useState<string>('');
   const [statusMessages, setStatusMessages] = useState<StatusMessage[]>([]);
 
@@ -33,14 +35,16 @@ const ControlPanel: React.FC = () => {
       avatarId: 'Dexter_Doctor_Standing2_public',
       voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
       description: 'Avatar médico profesional',
-      knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.'
+      knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.',
+      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png'
     },
     {
       name: '👔 CEO Ann',
       avatarId: 'Ann_Therapist_public',
       voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
       description: 'Avatar ejecutivo empresarial',
-      knowledgeBase: 'Eres un experto en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.'
+      knowledgeBase: 'Eres un experto en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
+      backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png'
     }
   ]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -138,6 +142,16 @@ const ControlPanel: React.FC = () => {
       console.log('✅ Confirmación: Texto enviado');
     });
 
+    socketInstance.on('avatar-start-talking', () => {
+      setIsSpeaking(true);
+      console.log('🗣️ Avatar comenzó a hablar');
+    });
+
+    socketInstance.on('avatar-stop-talking', () => {
+      setIsSpeaking(false);
+      console.log('🤐 Avatar dejó de hablar');
+    });
+
     socketInstance.on('error', (error) => {
       addStatusMessage('error', `❌ Error: ${error.message}`);
       console.error('❌ Error del servidor:', error);
@@ -203,7 +217,8 @@ const ControlPanel: React.FC = () => {
     socketRef.current.emit('change-avatar', {
       avatarId: config.avatarId,
       voiceId: config.voiceId,
-      knowledgeBase: config.knowledgeBase
+      knowledgeBase: config.knowledgeBase,
+      backgroundUrl: config.backgroundUrl
     });
 
     setCurrentAvatar(config.avatarId);
@@ -228,7 +243,7 @@ const ControlPanel: React.FC = () => {
     socketRef.current!.emit('stop-voice-chat');
   };
 
-  const handleSendText = () => {
+  const handleSendText = (taskType: string = 'REPEAT') => {
     if (!validateAction('speak-text')) return;
 
     if (!textInput.trim()) {
@@ -238,12 +253,17 @@ const ControlPanel: React.FC = () => {
     }
 
     console.log('📝 [PANEL] Emitiendo evento: speak-text con texto:', textInput);
-    addStatusMessage('info', '📝 Enviando texto...');
-    socketRef.current!.emit('speak-text', { text: textInput });
+    console.log('⚡ [PANEL] Tipo de tarea:', taskType);
+
+    addStatusMessage('info', taskType === 'INTERRUPT' ? '⚡ Interrumpiendo...' : '📝 Enviando texto...');
+    socketRef.current!.emit('speak-text', {
+      text: textInput,
+      taskType: taskType
+    });
     setTextInput('');
   };
 
-  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase', value: string) => {
+  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase' | 'backgroundUrl', value: string) => {
     const newConfigs = [...avatarConfigs];
     newConfigs[index][field] = value;
     setAvatarConfigs(newConfigs);
@@ -451,7 +471,7 @@ const ControlPanel: React.FC = () => {
                         }}
                       />
                     </div>
-                    <div>
+                    <div style={{ marginBottom: '10px' }}>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
                         🧠 Knowledge Base (Prompt del "Cerebro"):
                       </label>
@@ -473,6 +493,29 @@ const ControlPanel: React.FC = () => {
                       />
                       <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
                         💡 Cambia el "cerebro" del avatar en tiempo real. Define su personalidad y área de expertise.
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '5px' }}>
+                        🖼️ Background URL (Fondo de Escenario):
+                      </label>
+                      <input
+                        type="text"
+                        value={config.backgroundUrl || ''}
+                        onChange={(e) => updateAvatarConfig(index, 'backgroundUrl', e.target.value)}
+                        placeholder="https://ejemplo.com/imagen-oficina.jpg"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          fontSize: '14px',
+                          border: '2px solid #667eea',
+                          borderRadius: '5px',
+                          boxSizing: 'border-box',
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
+                        🏢 URL de imagen para el fondo (oficina, sala de juntas, etc.)
                       </div>
                     </div>
                   </div>
@@ -592,14 +635,29 @@ const ControlPanel: React.FC = () => {
                 }}>
                   Texto a Voz con CEO Ann
                 </h3>
-                <div style={{ display: 'flex', gap: '10px' }}>
+
+                {/* Nota sobre emociones */}
+                <div style={{
+                  marginBottom: '15px',
+                  padding: '12px',
+                  backgroundColor: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  color: '#856404'
+                }}>
+                  💡 <strong>Nota:</strong> Las emociones de voz se configuran al crear el avatar. Para cambiar la emoción, edita el avatar y selecciona una emoción diferente al crearlo.
+                </div>
+
+                {/* Input de Texto */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                   <input
                     type="text"
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
-                        handleSendText();
+                        handleSendText('REPEAT');
                       }
                     }}
                     placeholder="Escribe lo que Ann debe decir..."
@@ -614,7 +672,7 @@ const ControlPanel: React.FC = () => {
                     }}
                   />
                   <button
-                    onClick={handleSendText}
+                    onClick={() => handleSendText('REPEAT')}
                     disabled={!textInput.trim()}
                     style={{
                       padding: '15px 30px',
@@ -641,14 +699,45 @@ const ControlPanel: React.FC = () => {
                     📤 Enviar
                   </button>
                 </div>
+
+                {/* Botón de Interrupción */}
+                <button
+                  onClick={() => handleSendText('INTERRUPT')}
+                  disabled={!textInput.trim() || !isSpeaking}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    backgroundColor: !textInput.trim() || !isSpeaking ? '#ccc' : '#ff6b6b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: !textInput.trim() || !isSpeaking ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(255, 107, 107, 0.4)',
+                    transition: 'all 0.3s ease',
+                    marginBottom: '10px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (textInput.trim() && isSpeaking) {
+                      e.currentTarget.style.transform = 'scale(1.02)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  ⚡ Interrumpir y Hablar
+                </button>
+
                 <p style={{
                   color: '#666',
-                  marginTop: '10px',
-                  fontSize: '14px',
+                  fontSize: '13px',
                   textAlign: 'center',
-                  fontStyle: 'italic'
+                  fontStyle: 'italic',
+                  lineHeight: '1.5'
                 }}>
-                  Presiona Enter o haz clic en Enviar para que Ann hable
+                  💡 Tip: Usa "Interrumpir" para cambiar el tema mientras Ann está hablando
                 </p>
               </div>
             )}

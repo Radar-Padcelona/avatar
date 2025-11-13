@@ -17,6 +17,10 @@ const AvatarView: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [showAudioButton, setShowAudioButton] = useState(true);
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
+  const [backgroundUrl, setBackgroundUrl] = useState<string>('');
+  const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fullTextRef = useRef<string>('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -34,6 +38,54 @@ const AvatarView: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  // Función para animar subtítulos en bloques de 5 palabras deslizantes
+  const animateSubtitle = (text: string) => {
+    // Limpiar cualquier animación anterior
+    if (subtitleTimeoutRef.current) {
+      clearTimeout(subtitleTimeoutRef.current);
+    }
+
+    fullTextRef.current = text;
+    const words = text.split(' ');
+    let currentIndex = 0;
+    const maxWordsToShow = 5; // Máximo de palabras a mostrar a la vez
+
+    // Limpiar subtítulo inicial
+    setCurrentSubtitle('');
+
+    const showNextWord = () => {
+      if (currentIndex < words.length) {
+        // Calcular el inicio del bloque (para mostrar solo las últimas 5 palabras)
+        const startIndex = Math.max(0, currentIndex - maxWordsToShow + 1);
+        const wordsToShow = words.slice(startIndex, currentIndex + 1).join(' ');
+        setCurrentSubtitle(wordsToShow);
+        currentIndex++;
+
+        // Velocidad ajustada para mejor sincronización (300ms por palabra)
+        const delay = 300;
+        subtitleTimeoutRef.current = setTimeout(showNextWord, delay);
+      } else {
+        // Al terminar todas las palabras, limpiar después de un momento
+        subtitleTimeoutRef.current = setTimeout(() => {
+          setCurrentSubtitle('');
+        }, 1000);
+      }
+    };
+
+    // Comenzar animación
+    showNextWord();
+  };
+
+  // Función para limpiar subtítulos
+  const clearSubtitle = () => {
+    if (subtitleTimeoutRef.current) {
+      clearTimeout(subtitleTimeoutRef.current);
+      subtitleTimeoutRef.current = null;
+    }
+    fullTextRef.current = '';
+    setCurrentSubtitle('');
+  };
 
   // Limpieza del avatar
   const cleanupAvatar = useCallback(async () => {
@@ -100,8 +152,10 @@ const AvatarView: React.FC = () => {
       console.log('🔔 [AVATAR] Evento recibido: stop-voice-chat');
       handleStopVoiceChat();
     });
-    socketInstance.on('speak-text', (data: { text: string }) => {
+    socketInstance.on('speak-text', (data: { text: string; taskType?: string }) => {
       console.log('🔔 [AVATAR] Evento recibido: speak-text', data);
+      // Animar subtítulo palabra por palabra
+      animateSubtitle(data.text);
       handleSpeakText(data);
     });
 
@@ -140,6 +194,7 @@ const AvatarView: React.FC = () => {
       const stateResponse = await fetch(`${serverUrl}/api/avatar-state`);
       const avatarState = await stateResponse.json();
       setCurrentAvatarId(avatarState.avatarId);
+      setBackgroundUrl(avatarState.backgroundUrl || '');
 
       // Crear instancia del avatar
       console.log('🎭 Creando instancia del avatar...');
@@ -178,11 +233,21 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
         console.log('🗣️ Avatar empezó a hablar');
         setIsSpeaking(true);
+        // Notificar al servidor para sincronizar con el panel de control
+        if (socketRef.current) {
+          socketRef.current.emit('avatar-start-talking');
+        }
       });
 
       avatarInstance.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
         console.log('🤐 Avatar dejó de hablar');
         setIsSpeaking(false);
+        // Limpiar subtítulo cuando termina de hablar
+        clearSubtitle();
+        // Notificar al servidor
+        if (socketRef.current) {
+          socketRef.current.emit('avatar-stop-talking');
+        }
       });
 
       // Iniciar avatar
@@ -214,7 +279,7 @@ const AvatarView: React.FC = () => {
     }
   };
 
-  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string; knowledgeBase: string }) => {
+  const handleAvatarChange = async (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string }) => {
     // Prevenir cambios concurrentes
     if (isChangingAvatar.current) {
       console.log('⚠️ Ya hay un cambio de avatar en proceso');
@@ -227,6 +292,9 @@ const AvatarView: React.FC = () => {
       console.log(`🔄 [AVATAR] Cambiando a avatar: ${newState.avatarId}`);
       setIsLoading(true);
       setError(null);
+
+      // Limpiar subtítulos al cambiar de avatar
+      clearSubtitle();
 
       // Notificar inicio del cambio
       if (socketRef.current) {
@@ -300,11 +368,21 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
         console.log('🗣️ Avatar empezó a hablar');
         setIsSpeaking(true);
+        // Notificar al servidor
+        if (socketRef.current) {
+          socketRef.current.emit('avatar-start-talking');
+        }
       });
 
       avatarInstance.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
         console.log('🤐 Avatar dejó de hablar');
         setIsSpeaking(false);
+        // Limpiar subtítulo cuando termina de hablar
+        clearSubtitle();
+        // Notificar al servidor
+        if (socketRef.current) {
+          socketRef.current.emit('avatar-stop-talking');
+        }
       });
 
       // Iniciar nuevo avatar
@@ -323,6 +401,7 @@ const AvatarView: React.FC = () => {
       });
 
       setCurrentAvatarId(newState.avatarId);
+      setBackgroundUrl(newState.backgroundUrl || '');
 
     } catch (error) {
       console.error('❌ Error al cambiar avatar:', error);
@@ -427,7 +506,7 @@ const AvatarView: React.FC = () => {
     }
   };
 
-  const handleSpeakText = async (data: { text: string }) => {
+  const handleSpeakText = async (data: { text: string; taskType?: string }) => {
     console.log('🎯 handleSpeakText llamado con:', data);
     const currentAvatar = avatarRef.current;
     console.log('🎯 Estado del avatar:', currentAvatar ? 'existe' : 'null');
@@ -451,6 +530,14 @@ const AvatarView: React.FC = () => {
 
     try {
       console.log('📝 Enviando texto al avatar:', data.text);
+      console.log('⚡ Tipo de tarea:', data.taskType || 'REPEAT');
+
+      // Si es interrupción, primero interrumpir el habla actual
+      if (data.taskType === 'INTERRUPT') {
+        console.log('⚡ Interrumpiendo habla actual...');
+        await currentAvatar.interrupt();
+      }
+
       const response = await currentAvatar.speak({
         text: data.text,
         taskType: TaskType.REPEAT,
@@ -495,7 +582,11 @@ const AvatarView: React.FC = () => {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: '#1a1a1a',
-      position: 'relative'
+      position: 'relative',
+      backgroundImage: backgroundUrl ? `url(${backgroundUrl})` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
     }}>
       {/* Indicador de carga */}
       {isLoading && (
@@ -543,6 +634,33 @@ const AvatarView: React.FC = () => {
           animation: 'slideDown 0.3s ease-out'
         }}>
           ❌ {error}
+        </div>
+      )}
+
+      {/* Subtítulos */}
+      {currentSubtitle && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          minWidth: '200px',
+          maxWidth: '500px',
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          color: 'white',
+          padding: '12px 25px',
+          borderRadius: '10px',
+          fontSize: '18px',
+          fontWeight: '500',
+          textAlign: 'center',
+          zIndex: 20,
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+          lineHeight: '1.4',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          {currentSubtitle}
         </div>
       )}
 

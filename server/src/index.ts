@@ -23,6 +23,7 @@ interface AvatarState {
   avatarId: string;
   voiceId: string;
   knowledgeBase: string;
+  backgroundUrl?: string;
   ready: boolean;
 }
 
@@ -31,6 +32,7 @@ let currentAvatarState: AvatarState = {
   avatarId: 'Dexter_Doctor_Standing2_public',
   voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
   knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.',
+  backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
   ready: false
 };
 
@@ -88,7 +90,7 @@ io.on('connection', (socket: Socket) => {
   // ==============================
 
   // Escuchar cambios de avatar desde el panel de control
-  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string }) => {
+  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string }) => {
     console.log('🔄 [SERVER] Solicitud de cambio de avatar:', newState);
 
     // Actualizar estado (marca como no listo hasta que el avatar confirme)
@@ -96,6 +98,7 @@ io.on('connection', (socket: Socket) => {
       avatarId: newState.avatarId,
       voiceId: newState.voiceId,
       knowledgeBase: newState.knowledgeBase,
+      backgroundUrl: newState.backgroundUrl,
       ready: false
     };
 
@@ -176,8 +179,9 @@ io.on('connection', (socket: Socket) => {
   // ==============================
 
   // Control de texto (desde el panel de control)
-  socket.on('speak-text', (data: { text: string }) => {
+  socket.on('speak-text', (data: { text: string; taskType?: string }) => {
     console.log('📝 [SERVER] Solicitud de texto a voz:', data.text);
+    console.log('⚡ [SERVER] Tipo de tarea:', data.taskType);
 
     // Broadcast a todas las vistas de avatar
     io.emit('speak-text', data);
@@ -189,6 +193,22 @@ io.on('connection', (socket: Socket) => {
 
     // Notificar a todos (especialmente al panel de control)
     io.emit('text-spoken');
+  });
+
+  // Avatar empezó a hablar (desde AvatarView)
+  socket.on('avatar-start-talking', () => {
+    console.log('🗣️ [SERVER] Avatar comenzó a hablar');
+
+    // Broadcast a todos los clientes
+    io.emit('avatar-start-talking');
+  });
+
+  // Avatar dejó de hablar (desde AvatarView)
+  socket.on('avatar-stop-talking', () => {
+    console.log('🤐 [SERVER] Avatar dejó de hablar');
+
+    // Broadcast a todos los clientes
+    io.emit('avatar-stop-talking');
   });
 
   // ==============================
