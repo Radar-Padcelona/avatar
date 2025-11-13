@@ -19,8 +19,14 @@ const AvatarView: React.FC = () => {
   const [showAudioButton, setShowAudioButton] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string>('');
   const [backgroundUrl, setBackgroundUrl] = useState<string>('');
+  const [pendingVoiceChatRequest, setPendingVoiceChatRequest] = useState(false);
   const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullTextRef = useRef<string>('');
+
+  // Detectar si es Safari iOS
+  const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+                      /Safari/.test(navigator.userAgent) &&
+                      !/CriOS|FxiOS|OPiOS|mercury/.test(navigator.userAgent);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -123,6 +129,11 @@ const AvatarView: React.FC = () => {
     if (initializingRef.current) return;
     initializingRef.current = true;
 
+    // Log de detección de Safari iOS
+    if (isSafariIOS) {
+      console.log('🍎 Safari iOS detectado - usando flujo compatible con permisos de micrófono');
+    }
+
     // Conectar a Socket.IO
     const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
     const socketInstance = io(serverUrl, {
@@ -145,8 +156,18 @@ const AvatarView: React.FC = () => {
     // Escuchar eventos desde el panel de control
     socketInstance.on('avatar-changed', handleAvatarChange);
     socketInstance.on('start-voice-chat', () => {
-      console.log('🔔 [AVATAR] Evento recibido: start-voice-chat');
-      handleStartVoiceChat();
+      console.log('🔔 [AVATAR] Solicitud de chat de voz recibida');
+
+      if (isSafariIOS) {
+        // Safari iOS requiere gesto de usuario directo para getUserMedia
+        // Mostrar botón de confirmación en lugar de llamar directamente
+        console.log('🍎 Safari iOS detectado - mostrando botón de confirmación');
+        setPendingVoiceChatRequest(true);
+      } else {
+        // Otros navegadores pueden llamar directamente
+        console.log('🌐 Navegador estándar - llamando directamente');
+        handleStartVoiceChat();
+      }
     });
     socketInstance.on('stop-voice-chat', () => {
       console.log('🔔 [AVATAR] Evento recibido: stop-voice-chat');
@@ -438,17 +459,8 @@ const AvatarView: React.FC = () => {
     }
 
     try {
-      // Verificar permisos de micrófono primero
-      console.log('🎤 Verificando permisos de micrófono...');
-
-      const permissionStatus = await navigator.permissions.query({
-        name: 'microphone' as PermissionName
-      });
-
-      if (permissionStatus.state === 'denied') {
-        throw new Error('Permiso de micrófono denegado. Por favor, habilita el micrófono en la configuración de tu navegador.');
-      }
-
+      // Safari iOS no soporta navigator.permissions.query para micrófono
+      // Intentar directamente getUserMedia y manejar errores
       console.log('🎤 Solicitando acceso al micrófono...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Permisos de micrófono concedidos');
@@ -460,6 +472,7 @@ const AvatarView: React.FC = () => {
       const result = await currentAvatar.startVoiceChat();
       console.log('🎤 Resultado de startVoiceChat():', result);
       setIsListening(true);
+      setPendingVoiceChatRequest(false);
       console.log('✅ Chat de voz iniciado correctamente');
 
       // Notificar al servidor
@@ -468,13 +481,23 @@ const AvatarView: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Error en chat de voz:', error);
-      setError(error instanceof Error ? error.message : 'Error en chat de voz');
+
+      // Mensaje específico para errores de permisos (Safari iOS)
+      let errorMessage = error instanceof Error ? error.message : 'Error en chat de voz';
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError') {
+          errorMessage = 'Permiso de micrófono denegado. Por favor, permite el acceso al micrófono en la configuración de tu navegador.';
+        } else if (error.name === 'NotFoundError') {
+          errorMessage = 'No se encontró ningún micrófono. Por favor, conecta un micrófono y vuelve a intentarlo.';
+        }
+      }
+
+      setError(errorMessage);
+      setPendingVoiceChatRequest(false);
 
       // Notificar error
       if (socketRef.current) {
-        socketRef.current.emit('error', {
-          message: error instanceof Error ? error.message : 'Error en chat de voz'
-        });
+        socketRef.current.emit('error', { message: errorMessage });
       }
     }
   };
@@ -717,6 +740,78 @@ const AvatarView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Botón de confirmación para chat de voz (Safari iOS requiere gesto de usuario) */}
+      {pendingVoiceChatRequest && audioEnabled && avatar && !isLoading && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 30,
+          textAlign: 'center'
+        }}>
+          <button
+            onClick={() => {
+              handleStartVoiceChat();
+            }}
+            style={{
+              padding: '20px 40px',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '15px',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(40, 167, 69, 0.4)',
+              transition: 'all 0.3s ease',
+              animation: 'pulse 2s ease-in-out infinite'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.boxShadow = '0 12px 28px rgba(40, 167, 69, 0.5)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(40, 167, 69, 0.4)';
+            }}
+          >
+            🎤 Activar Chat de Voz
+          </button>
+          <p style={{
+            color: 'white',
+            marginTop: '15px',
+            fontSize: '14px',
+            opacity: 0.9,
+            textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+          }}>
+            Se requiere tu permiso para acceder al micrófono
+          </p>
+          <button
+            onClick={() => setPendingVoiceChatRequest(false)}
+            style={{
+              marginTop: '10px',
+              padding: '10px 20px',
+              fontSize: '14px',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              border: '1px solid white',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {/* Botón de inicio */}
       {showAudioButton && !isLoading && !avatar && (
