@@ -873,7 +873,7 @@ const ControlPanel: React.FC = () => {
             margin: 0
           }}>
             <li>Abre la vista del avatar en otra pestaña o navegador</li>
-            <li><a href="https://heygen-avatar-client.onrender.com" target="_blank" rel="noopener noreferrer">https://heygen-avatar-client.onrender.com</a></li>
+            <li><a href="https://avatar.wearebrave.net" target="_blank" rel="noopener noreferrer">https://heygen-avatar-client.onrender.com</a></li>
           </ul>
         </div>
       </div>
