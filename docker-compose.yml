@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # Servidor Backend (Node.js + Socket.IO)
+  # ============================================
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: heygen-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HEYGEN_API_KEY=${HEYGEN_API_KEY}
+      - CLIENT_URL=*
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    networks:
+      - heygen-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Cliente Frontend (React + Nginx)
+  # ============================================
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: heygen-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - heygen-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  heygen-network:
+    driver: bridge
