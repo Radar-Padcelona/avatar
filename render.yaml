@@ -12,16 +12,3 @@ services:
         value: production
       - key: HEYGEN_API_KEY
         sync: false
-
-  - type: static
-    name: heygen-avatar-client
-    env: static
-    region: oregon
-    plan: free
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./build
-    rootDir: client
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
