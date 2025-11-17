@@ -1,342 +1,181 @@
-# 🚀 Guía de Deployment en Hetzner
+📝 Guía para Actualizar la Aplicación
 
-Esta guía te llevará paso a paso para desplegar tu aplicación HeyGen Avatar en un servidor de Hetzner.
+Opción 1: Cambios en el Código (desde tu Mac)
 
-## 📋 Requisitos Previos
+Si haces cambios en tu máquina local y quieres subirlos al servidor:
 
-- Cuenta en Hetzner Cloud
-- API Key de HeyGen
-- Git instalado localmente
+En tu Mac:
+cd /Users/juanjocordero/Developer/heygen-demo
 
-## 💰 Costos Estimados
+# Hacer tus cambios en el código...
 
-**Servidor Recomendado: CPX11 (Shared vCPU)**
-- 2 vCPU
-- 2 GB RAM
-- 40 GB SSD
-- 20 TB tráfico
-- **Precio: ~4.5€/mes** (~5 USD/mes)
+# Commit y push
+git add .
+git commit -m "Descripción de tus cambios"
+git push origin main
 
-Este servidor es perfecto para empezar y puede manejar:
-- Múltiples conexiones WebSocket simultáneas
-- Streaming de avatares HeyGen
-- Build de aplicaciones React
-- Tráfico moderado-alto
-
-## 🎯 Paso 1: Crear Servidor en Hetzner
-
-1. **Accede a Hetzner Cloud Console**
-   - Ve a https://console.hetzner.cloud
-   - Si no tienes cuenta, créala (suelen tener crédito gratis para nuevos usuarios)
-
-2. **Crear un nuevo proyecto**
-   - Click en "New Project"
-   - Nombre: `heygen-avatar` (o el que prefieras)
-
-3. **Crear servidor**
-   - Click en "Add Server"
-   - **Location**: Elige la más cercana a ti (ej: Nuremberg, Helsinki, etc.)
-   - **Image**: Ubuntu 22.04
-   - **Type**: Shared vCPU > **CPX11** (2 vCPU, 2GB RAM)
-   - **SSH Key**:
-     - Si no tienes una, créala localmente: `ssh-keygen -t ed25519`
-     - Copia tu clave pública: `cat ~/.ssh/id_ed25519.pub`
-     - Pégala en Hetzner
-   - **Name**: `heygen-server` (o el que prefieras)
-   - Click en "Create & Buy Now"
-
-4. **Anota la IP del servidor**
-   - Aparecerá en el dashboard (ej: `157.90.123.45`)
-
-## 🔧 Paso 2: Configurar el Servidor
-
-### Conectarse al servidor
-
-```bash
-ssh root@TU_IP_DEL_SERVIDOR
-```
-
-### Actualizar sistema
-
-```bash
-apt update && apt upgrade -y
-```
-
-### Instalar Docker y Docker Compose
-
-```bash
-# Instalar Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-
-# Instalar Docker Compose
-apt install docker-compose -y
-
-# Verificar instalación
-docker --version
-docker-compose --version
-```
-
-### Instalar Git
-
-```bash
-apt install git -y
-```
-
-### Configurar Firewall (UFW)
-
-```bash
-# Habilitar firewall
-ufw allow OpenSSH
-ufw allow 80/tcp    # HTTP
-ufw allow 443/tcp   # HTTPS (para futuro)
-ufw allow 3001/tcp  # Servidor Node.js
-ufw --force enable
-
-# Verificar estado
-ufw status
-```
-
-## 📦 Paso 3: Clonar y Configurar el Proyecto
-
-### Clonar repositorio
-
-```bash
-cd /opt
-git clone https://github.com/Radar-Padcelona/avatar.git
-cd avatar
-```
-
-### Configurar variables de entorno
-
-```bash
-# Editar archivo de producción
-nano .env.production
-```
-
-Agrega tu API Key de HeyGen:
-
-```env
-HEYGEN_API_KEY=tu_api_key_real_aqui
-PORT=3001
-NODE_ENV=production
-CLIENT_URL=*
-```
-
-Guarda con `Ctrl+X`, luego `Y`, luego `Enter`.
-
-## 🚀 Paso 4: Desplegar la Aplicación
-
-### Ejecutar script de deployment
-
-```bash
-./deploy.sh
-```
-
-Este script automáticamente:
-- ✅ Verifica configuración
-- 🏗️ Construye las imágenes Docker
-- 🚀 Levanta los servicios
-- 🏥 Verifica que todo esté funcionando
-
-### Verificar que todo funciona
-
-```bash
-# Ver logs en tiempo real
-docker-compose logs -f
-
-# O logs específicos
-docker-compose logs -f server
-docker-compose logs -f client
-
-# Ver estado de contenedores
-docker-compose ps
-```
-
-## 🌐 Paso 5: Acceder a la Aplicación
-
-Una vez desplegado:
-
-- **Cliente (Frontend)**: `http://TU_IP_DEL_SERVIDOR`
-- **Servidor (API)**: `http://TU_IP_DEL_SERVIDOR:3001`
-- **Health Check**: `http://TU_IP_DEL_SERVIDOR:3001/health`
-
-Por ejemplo: `http://157.90.123.45`
-
-## 🔄 Actualizar la Aplicación
-
-Cuando hagas cambios en el código:
-
-```bash
-# Conectarte al servidor
-ssh root@TU_IP_DEL_SERVIDOR
-
-# Ir al directorio
+En el servidor (SSH):
 cd /opt/avatar
 
 # Obtener últimos cambios
 git pull origin main
 
-# Re-desplegar
-./deploy.sh
-```
+# Si cambiaste el CLIENTE:
+cd client
+npm install  # Si añadiste dependencias
+cd ..
+docker-compose build --no-cache client
+docker-compose up -d
 
-## 📊 Comandos Útiles
+# Si cambiaste el SERVIDOR:
+cd server
+npm install  # Si añadiste dependencias
+cd ..
+docker-compose build --no-cache server
+docker-compose up -d
 
-```bash
-# Ver logs en vivo
+# Si cambiaste AMBOS:
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+Opción 2: Cambios Directos en el Servidor
+
+Si quieres hacer cambios pequeños directamente en el servidor:
+
+# Conectarte al servidor
+ssh emrio@91.98.120.88
+
+cd /opt/avatar
+
+# Editar archivos (ejemplo: cambiar configuración del servidor)
+nano server/src/index.ts
+
+# Reconstruir y reiniciar
+docker-compose down
+docker-compose build --no-cache server
+docker-compose up -d
+
+Cambios Comunes:
+
+🎨 Cambiar el Avatar por Defecto:
+
+nano server/src/index.ts
+
+Busca estas líneas y cámbialas:
+let currentAvatarState: AvatarState = {
+avatarId: 'Dexter_Doctor_Standing2_public',  // ← Cambiar aquí
+voiceId: '7d51b57751f54a2c8ea646713cc2dd96',  // ← Cambiar aquí
+knowledgeBase: 'Tu nuevo prompt...',           // ← Cambiar aquí
+backgroundUrl: 'https://tu-nueva-url.com',    // ← Cambiar aquí
+quality: 'high',
+aspectRatio: '16:9',
+ready: false
+};
+
+Luego:
+docker-compose restart server
+
+🔑 Cambiar API Key de HeyGen:
+
+nano /opt/avatar/.env
+
+# Cambiar la línea:
+HEYGEN_API_KEY=tu_nueva_api_key
+
+# Reiniciar
+docker-compose restart server
+
+🎨 Cambiar Estilos del Cliente:
+
+# Editar CSS
+nano client/src/App.css
+
+# Reconstruir cliente
+docker-compose build --no-cache client
+docker-compose up -d
+
+🌐 Cambiar URL del Servidor:
+
+Si cambias de dominio:
+
+# 1. Editar docker-compose.yml
+nano docker-compose.yml
+
+# Cambiar en la sección client > build > args:
+# REACT_APP_SERVER_URL=https://tu-nuevo-dominio.com
+
+# 2. Reconstruir cliente
+docker-compose build --no-cache client
+docker-compose up -d
+
+# 3. Actualizar Nginx
+sudo nano /etc/nginx/sites-available/avatar.wearebrave.net
+# Cambiar server_name
+
+# 4. Obtener nuevo certificado SSL
+sudo certbot --nginx -d tu-nuevo-dominio.com
+
+Comandos Útiles Diarios:
+
+# Ver logs en tiempo real
 docker-compose logs -f
 
-# Reiniciar servicios
+# Ver solo errores
+docker-compose logs | grep -i error
+
+# Reiniciar servicios (sin rebuild)
 docker-compose restart
 
-# Detener servicios
-docker-compose down
-
-# Detener y eliminar todo (incluyendo volúmenes)
-docker-compose down -v
+# Ver estado de servicios
+docker-compose ps
 
 # Ver uso de recursos
 docker stats
 
-# Ver espacio en disco
-df -h
-
-# Limpiar imágenes Docker antiguas
+# Limpiar espacio (elimina imágenes antiguas)
 docker system prune -a
-```
 
-## 🔒 Paso 6 (Opcional): Configurar Dominio y HTTPS
+# Ver logs de Nginx
+sudo tail -f /var/log/nginx/heygen-avatar-error.log
 
-### Con dominio propio
+# Backup de la base de datos (si tuvieras)
+# No aplica en este caso, pero útil para el futuro
 
-1. **Configurar DNS**
-   - En tu proveedor de dominio (ej: GoDaddy, Namecheap, Cloudflare)
-   - Crear registro A: `@` → `TU_IP_DEL_SERVIDOR`
-   - Crear registro A: `www` → `TU_IP_DEL_SERVIDOR`
+Script Rápido de Actualización:
 
-2. **Instalar Certbot (SSL gratis con Let's Encrypt)**
+Puedes crear un script para facilitar actualizaciones:
 
-```bash
-apt install certbot python3-certbot-nginx -y
+# Crear script
+nano /opt/avatar/update.sh
 
-# Obtener certificado
-certbot --nginx -d tudominio.com -d www.tudominio.com
-```
+Pega esto:
+#!/bin/bash
+cd /opt/avatar
+git pull origin main
+cd client && npm install && cd ..
+cd server && npm install && cd ..
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+echo "✅ Actualización completada!"
 
-3. **Auto-renovación**
-   - Certbot configura auto-renovación automáticamente
-   - Verificar: `certbot renew --dry-run`
+Hazlo ejecutable:
+chmod +x /opt/avatar/update.sh
 
-## 📈 Monitoreo y Optimización
+Ahora solo ejecuta:
+/opt/avatar/update.sh
 
-### Ver uso de recursos
+Monitoreo y Mantenimiento:
 
-```bash
-# CPU y RAM en tiempo real
-htop
-
-# Uso de Docker
-docker stats
-
-# Logs del sistema
-journalctl -f
-```
-
-### Optimizar rendimiento
-
-Si necesitas más rendimiento, puedes upgradear el servidor en Hetzner:
-- **CPX21**: 3 vCPU, 4GB RAM (~8.5€/mes)
-- **CPX31**: 4 vCPU, 8GB RAM (~15.5€/mes)
-
-El upgrade es instantáneo (solo 1 minuto de downtime).
-
-## 🆘 Troubleshooting
-
-### Servidor no responde
-
-```bash
-# Verificar estado de contenedores
+# Ver si los servicios están corriendo
 docker-compose ps
 
-# Ver logs de errores
-docker-compose logs server --tail=50
-docker-compose logs client --tail=50
+# Verificar salud del servidor
+curl https://avatar.wearebrave.net/health
 
-# Reiniciar servicios
-docker-compose restart
-```
+# Ver certificado SSL (fecha de expiración)
+sudo certbot certificates
 
-### Error de API Key
-
-```bash
-# Verificar variables de entorno
-docker-compose exec server env | grep HEYGEN
-
-# Si no está, editar .env.production y redeployar
-nano .env.production
-./deploy.sh
-```
-
-### Puerto ocupado
-
-```bash
-# Ver qué está usando el puerto
-netstat -tulpn | grep :80
-netstat -tulpn | grep :3001
-
-# Detener servicios conflictivos
-docker-compose down
-./deploy.sh
-```
-
-### Sin espacio en disco
-
-```bash
-# Limpiar imágenes Docker antiguas
-docker system prune -a
-
-# Ver espacio
-df -h
-
-# Limpiar logs del sistema
-journalctl --vacuum-time=7d
-```
-
-## 💡 Consejos de Producción
-
-1. **Backups automáticos**
-   - Hetzner ofrece backups automáticos (+20% del costo del servidor)
-   - O configura snapshots manuales
-
-2. **Monitoreo**
-   - Considera usar Uptime Robot (gratis) para monitorear disponibilidad
-   - Configurar alertas si el servidor cae
-
-3. **Actualizaciones**
-   - Actualiza el sistema regularmente: `apt update && apt upgrade`
-   - Mantén Docker actualizado
-
-4. **Seguridad**
-   - Cambia el puerto SSH por defecto
-   - Configura fail2ban para prevenir ataques de fuerza bruta
-   - Mantén el firewall activo
-
-## 📞 Soporte
-
-Si tienes problemas:
-1. Revisa los logs: `docker-compose logs -f`
-2. Verifica la documentación de HeyGen
-3. Revisa el código en GitHub
-
-## 🎉 ¡Listo!
-
-Tu aplicación está ahora corriendo en Hetzner con:
-- ✅ Alta performance
-- ✅ Bajo costo (~5€/mes)
-- ✅ Deployment automatizado
-- ✅ Health checks
-- ✅ Logs estructurados
-- ✅ Fácil de actualizar
-
-¡Disfruta de tu avatar HeyGen en producción! 🚀
+# Renovar SSL manualmente (aunque se renueva automáticamente)
+sudo certbot renew

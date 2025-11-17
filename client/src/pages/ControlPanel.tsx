@@ -49,7 +49,7 @@ const ControlPanel: React.FC = () => {
       avatarId: 'Ann_Therapist_public',
       voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
       description: 'Avatar ejecutivo empresarial',
-      knowledgeBase: 'Eres un experto en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
+      knowledgeBase: 'Eres una experta en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
       backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
       quality: 'high',
       aspectRatio: '16:9'
