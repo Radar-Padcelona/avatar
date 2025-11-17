@@ -623,9 +623,7 @@ const ControlPanel: React.FC = () => {
                         <option value="1:1">⬜ 1:1 (Cuadrado / Instagram)</option>
                         <option value="4:3">🖥️ 4:3 (Estándar / Clásico)</option>
                       </select>
-                      <div style={{ fontSize: '11px', color: '#999', marginTop: '5px', fontStyle: 'italic' }}>
-                        ⚠️ Nota: La proporción se simula con CSS (puede recortar el video)
-                      </div>
+
                     </div>
                   </div>
                 )}
