@@ -41,7 +41,7 @@ services:
     container_name: heygen-client
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - server
     healthcheck:
