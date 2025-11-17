@@ -354,7 +354,8 @@ const AvatarView: React.FC = () => {
       await cleanupAvatar();
 
       // Esperar un momento para asegurar que el stream anterior se cierre completamente
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // HeyGen necesita tiempo para liberar la sesión anterior
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {

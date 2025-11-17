@@ -172,6 +172,10 @@ io.on('connection', (socket: Socket) => {
     console.log('🔄 [SERVER] Avatar iniciando cambio');
     currentAvatarState.ready = false;
 
+    // Invalidar cache de token para forzar uno nuevo
+    console.log('🗑️ Invalidando cache de token para nuevo avatar');
+    tokenCache = null;
+
     // Broadcast a todos
     io.emit('avatar-change-start');
   });
