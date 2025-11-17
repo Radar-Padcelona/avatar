@@ -353,6 +353,9 @@ const AvatarView: React.FC = () => {
       // Limpiar avatar actual
       await cleanupAvatar();
 
+      // Esperar un momento para asegurar que el stream anterior se cierre completamente
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
         setAudioEnabled(false);
