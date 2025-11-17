@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import StreamingAvatar, {
   AvatarQuality,
@@ -57,8 +57,8 @@ const AvatarView: React.FC = () => {
     }
   }, [error]);
 
-  // Función para animar subtítulos en bloques de 5 palabras deslizantes
-  const animateSubtitle = (text: string) => {
+  // Función para animar subtítulos en bloques de 5 palabras deslizantes (memoizada)
+  const animateSubtitle = useCallback((text: string) => {
     // Limpiar cualquier animación anterior
     if (subtitleTimeoutRef.current) {
       clearTimeout(subtitleTimeoutRef.current);
@@ -93,17 +93,17 @@ const AvatarView: React.FC = () => {
 
     // Comenzar animación
     showNextWord();
-  };
+  }, []);
 
-  // Función para limpiar subtítulos
-  const clearSubtitle = () => {
+  // Función para limpiar subtítulos (memoizada)
+  const clearSubtitle = useCallback(() => {
     if (subtitleTimeoutRef.current) {
       clearTimeout(subtitleTimeoutRef.current);
       subtitleTimeoutRef.current = null;
     }
     fullTextRef.current = '';
     setCurrentSubtitle('');
-  };
+  }, []);
 
   // Limpieza del avatar
   const cleanupAvatar = useCallback(async () => {
@@ -146,12 +146,17 @@ const AvatarView: React.FC = () => {
       console.log('🍎 Safari iOS detectado - usando flujo compatible con permisos de micrófono');
     }
 
-    // Conectar a Socket.IO
+    // Conectar a Socket.IO con configuración optimizada
     const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
     const socketInstance = io(serverUrl, {
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10,
+      timeout: 20000,
+      transports: ['websocket', 'polling'], // Preferir websocket para menor latencia
+      upgrade: true,
+      rememberUpgrade: true
     });
 
     socketRef.current = socketInstance;
@@ -536,15 +541,22 @@ const AvatarView: React.FC = () => {
     }
   };
 
-  const handleStopVoiceChat = async () => {
+  const handleStopVoiceChat = useCallback(async () => {
     const currentAvatar = avatarRef.current;
-    if (!currentAvatar || !isListening) return;
+
+    console.log('🛑 [STOP] Intentando detener chat de voz...');
+    console.log('🛑 [STOP] Avatar existe:', currentAvatar ? 'sí' : 'no');
+
+    if (!currentAvatar) {
+      console.warn('⚠️ No hay avatar disponible para detener');
+      return;
+    }
 
     try {
       console.log('🛑 Deteniendo chat de voz...');
       await currentAvatar.closeVoiceChat();
       setIsListening(false);
-      console.log('✅ Chat de voz detenido');
+      console.log('✅ Chat de voz detenido - estado actualizado a false');
 
       // Notificar al servidor
       if (socketRef.current) {
@@ -552,6 +564,8 @@ const AvatarView: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Error al detener chat de voz:', error);
+      // Forzar actualización de estado incluso si hay error
+      setIsListening(false);
       setError(error instanceof Error ? error.message : 'Error al detener chat de voz');
 
       // Notificar error
@@ -561,7 +575,7 @@ const AvatarView: React.FC = () => {
         });
       }
     }
-  };
+  }, []); // Sin dependencias - usa solo refs que no cambian
 
   const handleSpeakText = async (data: { text: string; taskType?: string }) => {
     console.log('🎯 handleSpeakText llamado con:', data);

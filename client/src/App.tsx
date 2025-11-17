@@ -1,16 +1,51 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import AvatarView from './pages/AvatarView';
-import ControlPanel from './pages/ControlPanel';
+
+// Lazy load de las rutas para code splitting
+const AvatarView = lazy(() => import('./pages/AvatarView'));
+const ControlPanel = lazy(() => import('./pages/ControlPanel'));
+
+// Loading fallback optimizado
+const LoadingFallback = () => (
+  <div style={{
+    minHeight: '100vh',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    color: 'white'
+  }}>
+    <div style={{ textAlign: 'center' }}>
+      <div style={{
+        width: '50px',
+        height: '50px',
+        border: '4px solid rgba(255,255,255,0.3)',
+        borderTop: '4px solid white',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+        margin: '0 auto 20px'
+      }} />
+      <p>Cargando...</p>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  </div>
+);
 
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<AvatarView />} />
-        <Route path="/control" element={<ControlPanel />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/" element={<AvatarView />} />
+          <Route path="/control" element={<ControlPanel />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

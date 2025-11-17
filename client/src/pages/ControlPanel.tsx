@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, memo } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 interface AvatarConfig {
@@ -82,7 +82,12 @@ const ControlPanel: React.FC = () => {
     const socketInstance = io(serverUrl, {
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10,
+      timeout: 20000,
+      transports: ['websocket', 'polling'], // Preferir websocket
+      upgrade: true,
+      rememberUpgrade: true
     });
 
     socketRef.current = socketInstance;
@@ -203,7 +208,7 @@ const ControlPanel: React.FC = () => {
     return true;
   };
 
-  const changeAvatar = (config: AvatarConfig) => {
+  const changeAvatar = useCallback((config: AvatarConfig) => {
     if (!socketRef.current || !isConnected) {
       addStatusMessage('error', '❌ No se puede cambiar el avatar');
       return;
@@ -235,25 +240,25 @@ const ControlPanel: React.FC = () => {
     setLastChange(new Date().toLocaleTimeString('es-ES'));
     setIsChangingAvatar(true);
     setIsAvatarReady(false);
-  };
+  }, [isConnected, isChangingAvatar, currentAvatar, addStatusMessage]);
 
-  const handleStartVoiceChat = () => {
+  const handleStartVoiceChat = useCallback(() => {
     if (!validateAction('start-voice-chat')) return;
 
     console.log('🎤 [PANEL] Emitiendo evento: start-voice-chat');
     addStatusMessage('info', '🎤 Iniciando chat de voz...');
     socketRef.current!.emit('start-voice-chat');
-  };
+  }, [validateAction, addStatusMessage]);
 
-  const handleStopVoiceChat = () => {
+  const handleStopVoiceChat = useCallback(() => {
     if (!validateAction('stop-voice-chat')) return;
 
     console.log('🛑 [PANEL] Emitiendo evento: stop-voice-chat');
     addStatusMessage('info', '🛑 Deteniendo chat de voz...');
     socketRef.current!.emit('stop-voice-chat');
-  };
+  }, [validateAction, addStatusMessage]);
 
-  const handleSendText = (taskType: string = 'REPEAT') => {
+  const handleSendText = useCallback((taskType: string = 'REPEAT') => {
     if (!validateAction('speak-text')) return;
 
     if (!textInput.trim()) {
@@ -271,10 +276,14 @@ const ControlPanel: React.FC = () => {
       taskType: taskType
     });
     setTextInput('');
-  };
+  }, [validateAction, textInput, addStatusMessage]);
 
-  const updateAvatarConfig = (index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase' | 'backgroundUrl' | 'quality' | 'aspectRatio', value: string) => {
+  const updateAvatarConfig = useCallback((index: number, field: 'avatarId' | 'voiceId' | 'knowledgeBase' | 'backgroundUrl' | 'quality' | 'aspectRatio', value: string) => {
     const newConfigs = [...avatarConfigs];
+
+    // Hacer una copia profunda del objeto específico que estamos modificando
+    newConfigs[index] = { ...newConfigs[index] };
+
     if (field === 'quality') {
       newConfigs[index][field] = value as 'low' | 'medium' | 'high';
     } else if (field === 'aspectRatio') {
@@ -283,12 +292,41 @@ const ControlPanel: React.FC = () => {
       newConfigs[index][field] = value;
     }
     setAvatarConfigs(newConfigs);
-  };
 
-  const getCurrentAvatarName = () => {
+    // Si estamos editando el avatar activo y cambiamos quality o aspectRatio, aplicar inmediatamente
+    const isActiveAvatar = newConfigs[index].avatarId === currentAvatar;
+      if (
+          isActiveAvatar &&
+          (field === 'quality' ||
+              field === 'aspectRatio' ||
+              field === 'knowledgeBase' ||
+              field === 'backgroundUrl')
+      ) {
+      console.log(`🔄 Aplicando cambio de ${field} automáticamente para avatar activo`);
+      console.log('📋 Config completa a enviar:', newConfigs[index]);
+
+      // Emitir cambio inmediatamente con la configuración actualizada
+      if (socketRef.current && isConnected) {
+        const configToSend = {
+          avatarId: newConfigs[index].avatarId,
+          voiceId: newConfigs[index].voiceId,
+          knowledgeBase: newConfigs[index].knowledgeBase,
+          backgroundUrl: newConfigs[index].backgroundUrl,
+          quality: newConfigs[index].quality || 'high',
+          aspectRatio: newConfigs[index].aspectRatio || '16:9'
+        };
+
+        console.log('📤 Enviando al servidor:', configToSend);
+        socketRef.current.emit('change-avatar', configToSend);
+        addStatusMessage('info', `✨ ${field === 'quality' ? 'Calidad' : 'Aspect Ratio'} actualizado`);
+      }
+    }
+  }, [avatarConfigs, currentAvatar, isConnected, addStatusMessage]);
+
+  const getCurrentAvatarName = useCallback(() => {
     const config = avatarConfigs.find(c => c.avatarId === currentAvatar);
     return config ? config.name : 'Desconocido';
-  };
+  }, [avatarConfigs, currentAvatar]);
 
   const isDoctorDexter = currentAvatar === 'Dexter_Doctor_Standing2_public';
   const isCEOAnn = currentAvatar === 'Ann_Therapist_public';

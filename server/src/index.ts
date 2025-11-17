@@ -6,12 +6,29 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Cache simple para tokens de HeyGen (evitar llamadas innecesarias)
+interface TokenCache {
+  token: string;
+  expiresAt: number;
+}
+let tokenCache: TokenCache | null = null;
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.CLIENT_URL || '*',
     methods: ['GET', 'POST']
+  },
+  // Optimizaciones de Socket.IO
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 10000,
+  maxHttpBufferSize: 1e6, // 1MB
+  perMessageDeflate: {
+    threshold: 1024 // Comprimir mensajes > 1KB
   }
 });
 
@@ -40,9 +57,23 @@ let currentAvatarState: AvatarState = {
   ready: false
 };
 
-// Endpoint para obtener el token de HeyGen
+// Endpoint para obtener el token de HeyGen (con cache reducido para seguridad)
 app.post('/api/get-token', async (req, res) => {
   try {
+    // Verificar si hay un token en cache válido (cachear solo 5 min por seguridad)
+    const now = Date.now();
+    if (tokenCache && tokenCache.expiresAt > now) {
+      console.log('✅ Usando token cacheado (válido hasta ' + new Date(tokenCache.expiresAt).toLocaleTimeString() + ')');
+      return res.json({ token: tokenCache.token });
+    }
+
+    // Si había un token expirado, limpiarlo
+    if (tokenCache && tokenCache.expiresAt <= now) {
+      console.log('🗑️ Token en cache expirado, solicitando nuevo...');
+      tokenCache = null;
+    }
+
+    console.log('🔑 Solicitando nuevo token a HeyGen...');
     const response = await fetch('https://api.heygen.com/v1/streaming.create_token', {
       method: 'POST',
       headers: {
@@ -55,19 +86,29 @@ app.post('/api/get-token', async (req, res) => {
 
     // Verificar si la respuesta tiene errores
     if (data.error) {
-      console.error('Error de HeyGen API:', data.error);
+      console.error('❌ Error de HeyGen API:', data.error);
+      tokenCache = null; // Limpiar cache en caso de error
       return res.status(400).json({ error: data.error });
     }
 
     // Extraer el token del objeto data
     if (data.data && data.data.token) {
+      // Cachear el token por solo 5 minutos (300000 ms) para mayor seguridad
+      // Los tokens de HeyGen pueden durar más, pero preferimos refrescar frecuentemente
+      tokenCache = {
+        token: data.data.token,
+        expiresAt: now + 300000 // 5 minutos
+      };
+      console.log('💾 Token nuevo cacheado hasta:', new Date(tokenCache.expiresAt).toLocaleTimeString());
       res.json({ token: data.data.token });
     } else {
-      console.error('Respuesta inesperada de HeyGen:', data);
+      console.error('❌ Respuesta inesperada de HeyGen:', data);
+      tokenCache = null; // Limpiar cache
       res.status(500).json({ error: 'Formato de respuesta inesperado' });
     }
   } catch (error) {
-    console.error('Error al obtener token:', error);
+    console.error('❌ Error al obtener token:', error);
+    tokenCache = null; // Limpiar cache en caso de error
     res.status(500).json({ error: 'Error al obtener token' });
   }
 });

@@ -7,8 +7,13 @@ const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 
+// Solo usar StrictMode en desarrollo para evitar doble renderizado
 root.render(
-  <React.StrictMode>
+  process.env.NODE_ENV === 'development' ? (
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  ) : (
     <App />
-  </React.StrictMode>
+  )
 );
