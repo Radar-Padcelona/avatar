@@ -20,6 +20,7 @@ interface AvatarConfig {
 
 const AvatarView: React.FC = () => {
   // Estados del avatar
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [avatar, setAvatar] = useState<StreamingAvatar | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +103,96 @@ const AvatarView: React.FC = () => {
     setAudioEnabled(true);
     audioActivatedOnce.current = true;
   }, []);
+
+  // Detener avatar
+  const stopAvatar = useCallback(async () => {
+    console.log('🛑 Deteniendo avatar...');
+
+    try {
+      const currentAvatar = avatarRef.current;
+
+      if (!currentAvatar) {
+        console.log('⚠️ No hay avatar para detener');
+        return;
+      }
+
+      // Cerrar chat de voz si está activo
+      if (isListening) {
+        try {
+          await currentAvatar.closeVoiceChat();
+          setIsListening(false);
+          console.log('✅ Chat de voz cerrado');
+        } catch (err) {
+          console.warn('⚠️ Error al cerrar chat de voz:', err);
+        }
+      }
+
+      // Detener avatar
+      try {
+        await currentAvatar.stopAvatar();
+        console.log('✅ Avatar detenido');
+      } catch (err) {
+        console.warn('⚠️ Error al detener avatar (ignorado):', err);
+      }
+
+      // Forzar cierre de sesión si tenemos session ID
+      if (currentSessionId.current) {
+        console.log('🔨 Forzando cierre de sesión:', currentSessionId.current);
+        try {
+          const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+          const response = await fetch(`${serverUrl}/api/force-close-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: currentSessionId.current })
+          });
+          const result = await response.json();
+          console.log('✅ Sesión cerrada en servidor:', result);
+
+          // Esperar un poco más después del cierre forzado
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (err) {
+          console.warn('⚠️ Error al forzar cierre:', err);
+        }
+      }
+
+      // Limpiar video
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.load(); // Forzar reset del elemento video
+        console.log('✅ Video limpiado');
+      }
+
+      // Limpiar estados
+      avatarRef.current = null;
+      setAvatar(null);
+      currentSessionId.current = null;
+      setCurrentConfig(null);
+      clearSubtitle();
+      setIsListening(false);
+      setIsSpeaking(false);
+      setIsProcessing(false);
+
+      console.log('✅ Avatar completamente detenido');
+
+      // Notificar al servidor
+      if (socketRef.current) {
+        socketRef.current.emit('avatar-stopped');
+      }
+
+    } catch (error) {
+      console.error('❌ Error al detener avatar:', error);
+
+      // Intentar limpiar de todas formas
+      avatarRef.current = null;
+      setAvatar(null);
+      currentSessionId.current = null;
+      setCurrentConfig(null);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+  }, [isListening, clearSubtitle]);
 
   // Inicializar avatar con configuración recibida
   const startAvatar = useCallback(async (config: AvatarConfig) => {
@@ -311,97 +402,7 @@ const AvatarView: React.FC = () => {
         socketRef.current.emit('avatar-error', { message: errorMessage });
       }
     }
-  }, [animateSubtitle, clearSubtitle]);
-
-  // Detener avatar
-  const stopAvatar = useCallback(async () => {
-    console.log('🛑 Deteniendo avatar...');
-
-    try {
-      const currentAvatar = avatarRef.current;
-
-      if (!currentAvatar) {
-        console.log('⚠️ No hay avatar para detener');
-        return;
-      }
-
-      // Cerrar chat de voz si está activo
-      if (isListening) {
-        try {
-          await currentAvatar.closeVoiceChat();
-          setIsListening(false);
-          console.log('✅ Chat de voz cerrado');
-        } catch (err) {
-          console.warn('⚠️ Error al cerrar chat de voz:', err);
-        }
-      }
-
-      // Detener avatar
-      try {
-        await currentAvatar.stopAvatar();
-        console.log('✅ Avatar detenido');
-      } catch (err) {
-        console.warn('⚠️ Error al detener avatar (ignorado):', err);
-      }
-
-      // Forzar cierre de sesión si tenemos session ID
-      if (currentSessionId.current) {
-        console.log('🔨 Forzando cierre de sesión:', currentSessionId.current);
-        try {
-          const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
-          const response = await fetch(`${serverUrl}/api/force-close-session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: currentSessionId.current })
-          });
-          const result = await response.json();
-          console.log('✅ Sesión cerrada en servidor:', result);
-
-          // Esperar un poco más después del cierre forzado
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (err) {
-          console.warn('⚠️ Error al forzar cierre:', err);
-        }
-      }
-
-      // Limpiar video
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.load(); // Forzar reset del elemento video
-        console.log('✅ Video limpiado');
-      }
-
-      // Limpiar estados
-      avatarRef.current = null;
-      setAvatar(null);
-      currentSessionId.current = null;
-      setCurrentConfig(null);
-      clearSubtitle();
-      setIsListening(false);
-      setIsSpeaking(false);
-      setIsProcessing(false);
-
-      console.log('✅ Avatar completamente detenido');
-
-      // Notificar al servidor
-      if (socketRef.current) {
-        socketRef.current.emit('avatar-stopped');
-      }
-
-    } catch (error) {
-      console.error('❌ Error al detener avatar:', error);
-
-      // Intentar limpiar de todas formas
-      avatarRef.current = null;
-      setAvatar(null);
-      currentSessionId.current = null;
-      setCurrentConfig(null);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    }
-  }, [isListening, clearSubtitle]);
+  }, [animateSubtitle, clearSubtitle, audioEnabled, handleActivateAudio, stopAvatar]);
 
   // Iniciar chat de voz
   const handleStartVoiceChat = useCallback(async () => {
