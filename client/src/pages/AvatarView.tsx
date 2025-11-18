@@ -109,8 +109,8 @@ const AvatarView: React.FC = () => {
       console.warn('⚠️ Avatar ya existe, limpiando primero...');
       await stopAvatar();
       // Dar tiempo a HeyGen para liberar la conexión completamente
-      console.log('⏳ Esperando 3 segundos a que HeyGen libere la conexión...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('⏳ Esperando 2 segundos a que HeyGen libere la conexión...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     try {
@@ -228,11 +228,12 @@ const AvatarView: React.FC = () => {
         avatarName: config.avatarId,
         voice: {
           voiceId: config.voiceId,
-          rate: 1.15,
+          rate: 1.2, // Velocidad ligeramente más rápida para respuestas ágiles
           emotion: VoiceEmotion.FRIENDLY
         },
         quality: quality,
         language: 'es',
+        videoEncoding: 'H264', // Mejor compatibilidad y potencialmente menor latencia
         knowledgeBase: config.knowledgeBase || 'Eres un asistente útil y amigable.'
       };
 
