@@ -86,22 +86,22 @@ const AvatarView: React.FC = () => {
   const handleActivateAudio = useCallback(async () => {
     console.log('🔊 Activando audio con gesto de usuario...');
 
-    // Pre-solicitar permisos de micrófono para Safari iOS
-    if (isSafariIOS) {
-      console.log('🎤 Pre-solicitando permisos de micrófono...');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        microphonePermissionGranted.current = true;
-        console.log('✅ Permisos de micrófono pre-concedidos');
-      } catch (err) {
-        console.warn('⚠️ No se pudieron pre-conceder permisos de micrófono:', err);
-      }
+    // Solicitar permisos de micrófono/audio explícitamente
+    // Esto satisface los requisitos de autoplay del navegador
+    console.log('🎤 Solicitando permisos de micrófono/audio...');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      microphonePermissionGranted.current = true;
+      console.log('✅ Permisos de micrófono/audio concedidos');
+    } catch (err) {
+      console.warn('⚠️ No se pudieron conceder permisos de micrófono:', err);
+      throw err; // Propagar error para manejarlo en el caller
     }
 
     setAudioEnabled(true);
     audioActivatedOnce.current = true;
-  }, [isSafariIOS]);
+  }, []);
 
   // Inicializar avatar con configuración recibida
   const startAvatar = useCallback(async (config: AvatarConfig) => {
@@ -123,9 +123,16 @@ const AvatarView: React.FC = () => {
       setBackgroundUrl(config.backgroundUrl || '');
       setAspectRatio(config.aspectRatio || '16:9');
 
-      // Activar audio automáticamente
+      // Activar audio automáticamente y solicitar permisos
+      // Esto debe hacerse ANTES de iniciar el stream para satisfacer autoplay
       if (!audioEnabled && !audioActivatedOnce.current) {
-        await handleActivateAudio();
+        try {
+          await handleActivateAudio();
+          console.log('✅ Audio activado y permisos concedidos');
+        } catch (err) {
+          console.warn('⚠️ No se pudieron activar permisos, continuando sin audio');
+          // Continuar sin audio si el usuario rechaza los permisos
+        }
       }
 
       const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
@@ -154,34 +161,36 @@ const AvatarView: React.FC = () => {
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
 
-          // Intentar reproducir con audio si ya está activado
-          if (audioEnabled) {
+          // Si el audio está activado (y se solicitaron permisos), reproducir con audio
+          // Los permisos de micrófono satisfacen las políticas de autoplay
+          if (audioEnabled && microphonePermissionGranted.current) {
             videoRef.current.muted = false;
             videoRef.current.play().then(() => {
-              console.log('✅ Video reproduciéndose con audio');
+              console.log('✅ Video reproduciéndose con audio (permisos concedidos)');
               setIsLoading(false);
               if (socketRef.current) {
                 socketRef.current.emit('avatar-ready');
               }
             }).catch(err => {
-              // Si falla con audio, intentar sin audio
-              console.log('⚠️ Error en autoplay con audio, reintentando sin audio...');
+              console.error('❌ Error en autoplay con audio:', err);
+              // Fallback: intentar sin audio
+              console.log('⚠️ Reintentando sin audio...');
               if (videoRef.current) {
                 videoRef.current.muted = true;
                 videoRef.current.play().then(() => {
-                  console.log('✅ Video reproduciéndose sin audio (click para activar)');
+                  console.log('✅ Video reproduciéndose sin audio');
                   setIsLoading(false);
                   if (socketRef.current) {
                     socketRef.current.emit('avatar-ready');
                   }
                 }).catch(err2 => {
-                  console.error('❌ Error en autoplay:', err2);
+                  console.error('❌ Error en autoplay sin audio:', err2);
                   setIsLoading(false);
                 });
               }
             });
           } else {
-            // Si el audio no está activado, reproducir sin audio
+            // Si no hay permisos, reproducir sin audio
             videoRef.current.muted = true;
             videoRef.current.play().then(() => {
               console.log('✅ Video reproduciéndose sin audio');
