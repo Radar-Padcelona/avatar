@@ -161,9 +161,15 @@ const AvatarView: React.FC = () => {
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
 
-          // Si el audio está activado (y se solicitaron permisos), reproducir con audio
+          // Si se concedieron permisos de micrófono, reproducir con audio
           // Los permisos de micrófono satisfacen las políticas de autoplay
-          if (audioEnabled && microphonePermissionGranted.current) {
+          console.log('🔍 Verificando permisos:', {
+            microphonePermissionGranted: microphonePermissionGranted.current,
+            audioActivatedOnce: audioActivatedOnce.current
+          });
+
+          if (microphonePermissionGranted.current) {
+            console.log('🔊 Intentando reproducir con audio...');
             videoRef.current.muted = false;
             videoRef.current.play().then(() => {
               console.log('✅ Video reproduciéndose con audio (permisos concedidos)');
@@ -191,6 +197,7 @@ const AvatarView: React.FC = () => {
             });
           } else {
             // Si no hay permisos, reproducir sin audio
+            console.log('🔇 Reproduciendo sin audio (sin permisos)');
             videoRef.current.muted = true;
             videoRef.current.play().then(() => {
               console.log('✅ Video reproduciéndose sin audio');
@@ -456,10 +463,21 @@ const AvatarView: React.FC = () => {
     try {
       console.log('📝 Enviando texto al avatar:', text);
       console.log('⚡ Tipo de tarea:', taskType);
+      console.log('📋 Configuración actual:', currentConfig);
 
-      // TaskType solo tiene TALK y REPEAT, no INTERRUPT
-      // TALK interrumpe la conversación actual
-      const task = taskType === 'INTERRUPT' ? TaskType.TALK : TaskType.REPEAT;
+      // Si el avatar tiene knowledgeBase, debe usar TALK
+      // REPEAT solo funciona en modo "texto puro" sin knowledgeBase
+      let task: TaskType;
+
+      if (currentConfig?.knowledgeBase) {
+        console.log('💡 Avatar en modo AI (con knowledgeBase), usando TALK');
+        task = TaskType.TALK;
+      } else {
+        // Sin knowledgeBase, respetar el taskType solicitado
+        task = taskType === 'INTERRUPT' ? TaskType.TALK : TaskType.REPEAT;
+      }
+
+      console.log('📤 Enviando con TaskType:', task);
 
       await avatarRef.current.speak({
         text: text,
@@ -476,7 +494,7 @@ const AvatarView: React.FC = () => {
       console.error('❌ Error al enviar texto:', err);
       setError('Error al enviar texto al avatar');
     }
-  }, []);
+  }, [currentConfig]);
 
   // Inicialización del socket
   useEffect(() => {
