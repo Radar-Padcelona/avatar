@@ -34,6 +34,8 @@ const AvatarView: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<AvatarConfig | null>(null);
+  const [showAudioButton, setShowAudioButton] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -87,22 +89,44 @@ const AvatarView: React.FC = () => {
   const handleActivateAudio = useCallback(async () => {
     console.log('🔊 Activando audio con gesto de usuario...');
 
-    // Solicitar permisos de micrófono/audio explícitamente
-    // Esto satisface los requisitos de autoplay del navegador
-    console.log('🎤 Solicitando permisos de micrófono/audio...');
     try {
+      // Solicitar permisos de micrófono/audio explícitamente
+      // Esto satisface los requisitos de autoplay del navegador
+      console.log('🎤 Solicitando permisos de micrófono/audio...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
       microphonePermissionGranted.current = true;
       console.log('✅ Permisos de micrófono/audio concedidos');
-    } catch (err) {
-      console.warn('⚠️ No se pudieron conceder permisos de micrófono:', err);
-      throw err; // Propagar error para manejarlo en el caller
-    }
 
-    setAudioEnabled(true);
-    audioActivatedOnce.current = true;
-  }, []);
+      // Ahora que el usuario ha interactuado, reproducir el video con audio
+      if (videoRef.current && videoReady) {
+        videoRef.current.muted = false;
+        await videoRef.current.play();
+        console.log('✅ Video reproduciéndose con audio después de interacción');
+      }
+
+      setAudioEnabled(true);
+      audioActivatedOnce.current = true;
+      setShowAudioButton(false); // Ocultar el botón una vez activado
+
+    } catch (err) {
+      console.error('⚠️ Error al activar audio:', err);
+
+      // Si falla, al menos intentar reproducir sin audio
+      if (videoRef.current && videoReady) {
+        try {
+          videoRef.current.muted = true;
+          await videoRef.current.play();
+          console.log('⚠️ Video reproduciéndose sin audio (permisos denegados)');
+          setShowAudioButton(false);
+        } catch (playErr) {
+          console.error('❌ Error al reproducir video:', playErr);
+        }
+      }
+
+      throw err;
+    }
+  }, [videoReady]);
 
   // Detener avatar
   const stopAvatar = useCallback(async () => {
@@ -214,17 +238,8 @@ const AvatarView: React.FC = () => {
       setBackgroundUrl(config.backgroundUrl || '');
       setAspectRatio(config.aspectRatio || '16:9');
 
-      // Activar audio automáticamente y solicitar permisos
-      // Esto debe hacerse ANTES de iniciar el stream para satisfacer autoplay
-      if (!audioEnabled && !audioActivatedOnce.current) {
-        try {
-          await handleActivateAudio();
-          console.log('✅ Audio activado y permisos concedidos');
-        } catch (err) {
-          console.warn('⚠️ No se pudieron activar permisos, continuando sin audio');
-          // Continuar sin audio si el usuario rechaza los permisos
-        }
-      }
+      // NO activar audio automáticamente - esperar interacción del usuario
+      // El botón "Activar Audio" se mostrará cuando el stream esté listo
 
       const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
 
@@ -252,54 +267,17 @@ const AvatarView: React.FC = () => {
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
 
-          // Si se concedieron permisos de micrófono, reproducir con audio
-          // Los permisos de micrófono satisfacen las políticas de autoplay
-          console.log('🔍 Verificando permisos:', {
-            microphonePermissionGranted: microphonePermissionGranted.current,
-            audioActivatedOnce: audioActivatedOnce.current
-          });
+          // Marcar que el video está listo
+          setVideoReady(true);
+          setIsLoading(false);
 
-          if (microphonePermissionGranted.current) {
-            console.log('🔊 Intentando reproducir con audio...');
-            videoRef.current.muted = false;
-            videoRef.current.play().then(() => {
-              console.log('✅ Video reproduciéndose con audio (permisos concedidos)');
-              setIsLoading(false);
-              if (socketRef.current) {
-                socketRef.current.emit('avatar-ready');
-              }
-            }).catch(err => {
-              console.error('❌ Error en autoplay con audio:', err);
-              // Fallback: intentar sin audio
-              console.log('⚠️ Reintentando sin audio...');
-              if (videoRef.current) {
-                videoRef.current.muted = true;
-                videoRef.current.play().then(() => {
-                  console.log('✅ Video reproduciéndose sin audio');
-                  setIsLoading(false);
-                  if (socketRef.current) {
-                    socketRef.current.emit('avatar-ready');
-                  }
-                }).catch(err2 => {
-                  console.error('❌ Error en autoplay sin audio:', err2);
-                  setIsLoading(false);
-                });
-              }
-            });
-          } else {
-            // Si no hay permisos, reproducir sin audio
-            console.log('🔇 Reproduciendo sin audio (sin permisos)');
-            videoRef.current.muted = true;
-            videoRef.current.play().then(() => {
-              console.log('✅ Video reproduciéndose sin audio');
-              setIsLoading(false);
-              if (socketRef.current) {
-                socketRef.current.emit('avatar-ready');
-              }
-            }).catch(err => {
-              console.error('❌ Error en autoplay:', err);
-              setIsLoading(false);
-            });
+          // Mostrar botón para activar audio con interacción del usuario
+          setShowAudioButton(true);
+
+          console.log('🔊 Video listo, esperando interacción del usuario para reproducir con audio');
+
+          if (socketRef.current) {
+            socketRef.current.emit('avatar-ready');
           }
         }
       });
@@ -402,7 +380,7 @@ const AvatarView: React.FC = () => {
         socketRef.current.emit('avatar-error', { message: errorMessage });
       }
     }
-  }, [animateSubtitle, clearSubtitle, audioEnabled, handleActivateAudio, stopAvatar]);
+  }, [animateSubtitle, clearSubtitle, stopAvatar]);
 
   // Iniciar chat de voz
   const handleStartVoiceChat = useCallback(async () => {
@@ -411,9 +389,11 @@ const AvatarView: React.FC = () => {
       return;
     }
 
-    if (!audioEnabled && !audioActivatedOnce.current) {
-      console.log('🔊 Esperando activación de audio...');
-      await handleActivateAudio();
+    // Verificar que el audio esté activado
+    if (!audioEnabled || !microphonePermissionGranted.current) {
+      console.error('❌ Audio no activado. El usuario debe hacer click en "Activar Audio" primero.');
+      setError('Por favor, activa el audio primero haciendo click en el botón.');
+      return;
     }
 
     try {
@@ -429,7 +409,7 @@ const AvatarView: React.FC = () => {
       console.error('❌ Error al iniciar chat de voz:', err);
       setError('Error al iniciar chat de voz');
     }
-  }, [audioEnabled, handleActivateAudio]);
+  }, [audioEnabled]);
 
   // Detener chat de voz
   const handleStopVoiceChat = useCallback(async () => {
@@ -734,6 +714,46 @@ const AvatarView: React.FC = () => {
       )}
 
       {/* Botón de activar audio */}
+      {showAudioButton && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          borderRadius: '20px',
+          padding: '40px',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+          zIndex: 1000,
+          textAlign: 'center',
+          maxWidth: '400px'
+        }}>
+          <div style={{
+            fontSize: '60px',
+            marginBottom: '20px'
+          }}>🔊</div>
+          <h3 style={{ marginBottom: '20px', color: 'white' }}>Activar Audio</h3>
+          <p style={{ marginBottom: '30px', color: '#ccc' }}>
+            Haz click para activar el audio y comenzar la conversación
+          </p>
+          <button
+            onClick={handleActivateAudio}
+            style={{
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '15px 40px',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(40, 167, 69, 0.3)'
+            }}
+          >
+            Activar Audio
+          </button>
+        </div>
+      )}
 
       {/* Confirmación de voz para Safari iOS */}
       {pendingVoiceChatRequest && (
