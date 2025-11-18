@@ -131,6 +131,13 @@ app.get('/api/avatar-state', (req, res) => {
   res.json(currentAvatarState);
 });
 
+// Endpoint para invalidar el cache de token (usado al cambiar avatares)
+app.post('/api/invalidate-token', (req, res) => {
+  console.log('🗑️ Invalidando cache de token por solicitud explícita');
+  tokenCache = null;
+  res.json({ success: true, message: 'Token cache invalidated' });
+});
+
 // Endpoint para forzar cierre de sesión de HeyGen
 app.post('/api/force-close-session', async (req, res) => {
   try {
@@ -168,6 +175,77 @@ app.post('/api/force-close-session', async (req, res) => {
   }
 });
 
+// Endpoint para limpiar todas las sesiones activas
+app.post('/api/cleanup-sessions', async (req, res) => {
+  try {
+    console.log('🧹 Solicitando limpieza de todas las sesiones activas...');
+
+    // Intentar obtener la lista de sesiones activas
+    const listResponse = await fetch('https://api.heygen.com/v1/streaming.list', {
+      method: 'GET',
+      headers: {
+        'x-api-key': process.env.HEYGEN_API_KEY || '',
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!listResponse.ok) {
+      console.warn('⚠️ No se pudo obtener lista de sesiones activas');
+      return res.json({ success: true, message: 'No se pudo obtener lista de sesiones' });
+    }
+
+    const listData = await listResponse.json();
+    const sessions = listData.data?.sessions || [];
+
+    if (sessions.length === 0) {
+      console.log('✅ No hay sesiones activas para limpiar');
+      return res.json({ success: true, message: 'No hay sesiones activas' });
+    }
+
+    console.log(`🔨 Cerrando ${sessions.length} sesiones activas...`);
+
+    // Cerrar cada sesión activa
+    const closePromises = sessions.map(async (session: any) => {
+      try {
+        const response = await fetch(`https://api.heygen.com/v1/streaming.stop`, {
+          method: 'POST',
+          headers: {
+            'x-api-key': process.env.HEYGEN_API_KEY || '',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ session_id: session.session_id })
+        });
+
+        if (response.ok) {
+          console.log(`✅ Sesión cerrada: ${session.session_id}`);
+          return { sessionId: session.session_id, success: true };
+        } else {
+          console.warn(`⚠️ Error al cerrar sesión ${session.session_id}`);
+          return { sessionId: session.session_id, success: false };
+        }
+      } catch (err) {
+        console.error(`❌ Error al cerrar sesión ${session.session_id}:`, err);
+        return { sessionId: session.session_id, success: false, error: err };
+      }
+    });
+
+    const results = await Promise.all(closePromises);
+    const successCount = results.filter(r => r.success).length;
+
+    console.log(`✅ Limpieza completada: ${successCount}/${sessions.length} sesiones cerradas`);
+
+    res.json({
+      success: true,
+      message: `${successCount}/${sessions.length} sesiones cerradas`,
+      results
+    });
+
+  } catch (error) {
+    console.error('❌ Error al limpiar sesiones:', error);
+    res.json({ success: true, warning: 'Error al limpiar sesiones, pero continuando' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -181,31 +259,49 @@ io.on('connection', (socket: Socket) => {
   socket.emit('avatar-state', currentAvatarState);
 
   // ==============================
-  // EVENTOS DE CAMBIO DE AVATAR
+  // EVENTOS DE CONTROL DE AVATAR
   // ==============================
 
-  // Escuchar cambios de avatar desde el panel de control
-  socket.on('change-avatar', (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string; quality?: 'low' | 'medium' | 'high'; aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' }) => {
-    console.log('🔄 [SERVER] Solicitud de cambio de avatar:', newState);
+  // Iniciar avatar (nuevo flujo simplificado)
+  socket.on('start-avatar', (config: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string; quality?: 'low' | 'medium' | 'high'; aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3'; interactionMode?: 'streaming' | 'text' }) => {
+    console.log('🚀 [SERVER] Solicitud de inicio de avatar:', config);
 
-    // Actualizar estado (marca como no listo hasta que el avatar confirme)
+    // Invalidar cache de token para obtener uno fresco
+    console.log('🗑️ Invalidando cache de token para nuevo avatar');
+    tokenCache = null;
+
+    // Actualizar estado del servidor
     currentAvatarState = {
-      avatarId: newState.avatarId,
-      voiceId: newState.voiceId,
-      knowledgeBase: newState.knowledgeBase,
-      backgroundUrl: newState.backgroundUrl,
-      quality: newState.quality || 'high',
-      aspectRatio: newState.aspectRatio || '16:9',
+      avatarId: config.avatarId,
+      voiceId: config.voiceId,
+      knowledgeBase: config.knowledgeBase,
+      backgroundUrl: config.backgroundUrl,
+      quality: config.quality || 'high',
+      aspectRatio: config.aspectRatio || '16:9',
       ready: false
     };
 
-    // Notificar a todos que el cambio comenzó
-    io.emit('avatar-change-start');
+    // Broadcast a todas las vistas de avatar para que inicien
+    io.emit('start-avatar', config);
 
-    // Broadcast a todos los clientes (especialmente a la vista del avatar)
-    io.emit('avatar-changed', currentAvatarState);
+    console.log('📢 [SERVER] Start avatar broadcasted to all avatar views');
+  });
 
-    console.log('📢 [SERVER] Avatar change broadcasted to all clients');
+  // Detener avatar (nuevo flujo simplificado)
+  socket.on('stop-avatar', () => {
+    console.log('🛑 [SERVER] Solicitud de detención de avatar');
+
+    // Marcar como no listo
+    currentAvatarState.ready = false;
+
+    // Invalidar cache de token
+    console.log('🗑️ Invalidando cache de token');
+    tokenCache = null;
+
+    // Broadcast a todas las vistas de avatar para que detengan
+    io.emit('stop-avatar');
+
+    console.log('📢 [SERVER] Stop avatar broadcasted to all avatar views');
   });
 
   // Actualizar estado del servidor sin hacer broadcast de cambio (para carga inicial de avatar personalizado)
@@ -243,6 +339,24 @@ io.on('connection', (socket: Socket) => {
 
     // Notificar a todos que el avatar está listo
     io.emit('avatar-ready');
+  });
+
+  // Cuando el avatar se detiene (viene desde AvatarView)
+  socket.on('avatar-stopped', () => {
+    console.log('🛑 [SERVER] Avatar reporta que se detuvo');
+    currentAvatarState.ready = false;
+
+    // Notificar a todos
+    io.emit('avatar-stopped');
+  });
+
+  // Cuando hay un error en el avatar (viene desde AvatarView)
+  socket.on('avatar-error', (data: { message: string }) => {
+    console.error('❌ [SERVER] Error del avatar:', data.message);
+    currentAvatarState.ready = false;
+
+    // Notificar a todos
+    io.emit('avatar-error', data);
   });
 
   // Cuando el avatar inicia el cambio (viene desde AvatarView)
