@@ -454,81 +454,105 @@ const ControlPanel: React.FC = () => {
                 />
               </div>
 
-              {/* Voice Selector */}
+              {/* Voice ID - Solo lectura para presets, selector para personalizado */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555', fontSize: '14px' }}>
-                  Voz * {isLoadingVoices && <span style={{ fontSize: '12px', color: '#999' }}>(Cargando...)</span>}
+                  Voz * {selectedPresetName === 'Personalizado' && isLoadingVoices && <span style={{ fontSize: '12px', color: '#999' }}>(Cargando...)</span>}
                 </label>
-                {voicesError ? (
-                  <div style={{ padding: '10px', backgroundColor: '#fee', borderRadius: '8px', marginBottom: '10px' }}>
-                    <span style={{ color: '#c33', fontSize: '13px' }}>{voicesError}</span>
-                    <button
-                      onClick={loadAvailableVoices}
+
+                {selectedPresetName === 'Personalizado' ? (
+                  // Selector de voces para "Personalizado"
+                  <>
+                    {voicesError ? (
+                      <div style={{ padding: '10px', backgroundColor: '#fee', borderRadius: '8px', marginBottom: '10px' }}>
+                        <span style={{ color: '#c33', fontSize: '13px' }}>{voicesError}</span>
+                        <button
+                          onClick={loadAvailableVoices}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '5px 10px',
+                            fontSize: '12px',
+                            backgroundColor: '#667eea',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    ) : null}
+                    <select
+                      value={currentConfig.voiceId}
+                      onChange={(e) => setCurrentConfig({ ...currentConfig, voiceId: e.target.value })}
+                      disabled={isLoadingVoices}
                       style={{
-                        marginLeft: '10px',
-                        padding: '5px 10px',
-                        fontSize: '12px',
-                        backgroundColor: '#667eea',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '15px',
+                        borderRadius: '8px',
+                        border: '2px solid #ddd',
+                        cursor: isLoadingVoices ? 'wait' : 'pointer',
+                        backgroundColor: isLoadingVoices ? '#f5f5f5' : 'white'
                       }}
                     >
-                      Reintentar
-                    </button>
-                  </div>
-                ) : null}
-                <select
-                  value={currentConfig.voiceId}
-                  onChange={(e) => setCurrentConfig({ ...currentConfig, voiceId: e.target.value })}
-                  disabled={isLoadingVoices}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    fontSize: '15px',
-                    borderRadius: '8px',
-                    border: '2px solid #ddd',
-                    cursor: isLoadingVoices ? 'wait' : 'pointer',
-                    backgroundColor: isLoadingVoices ? '#f5f5f5' : 'white'
-                  }}
-                >
-                  <option value="">-- Selecciona una voz --</option>
-                  {Object.entries(
-                    availableVoices.reduce((acc, voice) => {
-                      if (!acc[voice.language]) acc[voice.language] = [];
-                      acc[voice.language].push(voice);
-                      return acc;
-                    }, {} as Record<string, Voice[]>)
-                  )
-                    .sort(([langA], [langB]) => {
-                      // Español primero, luego inglés, luego el resto
-                      if (langA === 'Spanish') return -1;
-                      if (langB === 'Spanish') return 1;
-                      if (langA === 'English') return -1;
-                      if (langB === 'English') return 1;
-                      return langA.localeCompare(langB);
-                    })
-                    .map(([language, voices]) => (
-                      <optgroup key={language} label={`${language} (${voices.length})`}>
-                        {voices
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map((voice) => (
-                            <option key={voice.voice_id} value={voice.voice_id}>
-                              {voice.name} ({voice.gender})
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                </select>
-                {currentConfig.voiceId && availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio && (
-                  <div style={{ marginTop: '8px' }}>
-                    <audio
-                      controls
-                      style={{ width: '100%', height: '36px' }}
-                      src={availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio || ''}
-                    />
-                  </div>
+                      <option value="">-- Selecciona una voz --</option>
+                      {Object.entries(
+                        availableVoices.reduce((acc, voice) => {
+                          if (!acc[voice.language]) acc[voice.language] = [];
+                          acc[voice.language].push(voice);
+                          return acc;
+                        }, {} as Record<string, Voice[]>)
+                      )
+                        .sort(([langA], [langB]) => {
+                          // Español primero, luego inglés, luego el resto
+                          if (langA === 'Spanish') return -1;
+                          if (langB === 'Spanish') return 1;
+                          if (langA === 'English') return -1;
+                          if (langB === 'English') return 1;
+                          return langA.localeCompare(langB);
+                        })
+                        .map(([language, voices]) => (
+                          <optgroup key={language} label={`${language} (${voices.length})`}>
+                            {voices
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map((voice) => (
+                                <option key={voice.voice_id} value={voice.voice_id}>
+                                  {voice.name} ({voice.gender})
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                    </select>
+                    {currentConfig.voiceId && availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio && (
+                      <div style={{ marginTop: '8px' }}>
+                        <audio
+                          controls
+                          style={{ width: '100%', height: '36px' }}
+                          src={availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio || ''}
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  // Campo de solo lectura para Doctor Dexter y Ann
+                  <input
+                    type="text"
+                    value={currentConfig.voiceId}
+                    readOnly
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '15px',
+                      borderRadius: '8px',
+                      border: '2px solid #ddd',
+                      fontFamily: 'monospace',
+                      backgroundColor: '#f8f9fa',
+                      color: '#666',
+                      cursor: 'not-allowed'
+                    }}
+                  />
                 )}
               </div>
 
