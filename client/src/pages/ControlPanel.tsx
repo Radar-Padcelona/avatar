@@ -81,10 +81,10 @@ const ControlPanel: React.FC = () => {
 
     const socketInstance = io(serverUrl, {
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 500, // Reducido para reconexión más rápida
+      reconnectionDelayMax: 2000, // Reducido de 5000ms
       reconnectionAttempts: 10,
-      timeout: 20000,
+      timeout: 5000, // Reducido de 20000ms para detección rápida
       transports: ['websocket', 'polling'], // Preferir websocket
       upgrade: true,
       rememberUpgrade: true

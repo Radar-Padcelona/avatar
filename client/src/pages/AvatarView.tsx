@@ -21,8 +21,12 @@ const AvatarView: React.FC = () => {
   const [backgroundUrl, setBackgroundUrl] = useState<string>('');
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1' | '4:3'>('16:9');
   const [pendingVoiceChatRequest, setPendingVoiceChatRequest] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Nuevo: indica cuando está procesando la respuesta
+  const [userSpeaking, setUserSpeaking] = useState(false); // Nuevo: indica cuando el usuario está hablando
   const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullTextRef = useRef<string>('');
+  const microphonePermissionGranted = useRef<boolean>(false);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detectar si es Safari iOS
   const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
@@ -150,10 +154,10 @@ const AvatarView: React.FC = () => {
     const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
     const socketInstance = io(serverUrl, {
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 500, // Reducido de 1000ms para reconexión más rápida
+      reconnectionDelayMax: 2000, // Reducido de 5000ms
       reconnectionAttempts: 10,
-      timeout: 20000,
+      timeout: 5000, // Reducido de 20000ms para detección rápida de fallos
       transports: ['websocket', 'polling'], // Preferir websocket para menor latencia
       upgrade: true,
       rememberUpgrade: true
@@ -272,6 +276,7 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
         console.log('🗣️ Avatar empezó a hablar');
         setIsSpeaking(true);
+        setIsProcessing(false); // Ya no está procesando, está hablando
         // Notificar al servidor para sincronizar con el panel de control
         if (socketRef.current) {
           socketRef.current.emit('avatar-start-talking');
@@ -281,12 +286,32 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
         console.log('🤐 Avatar dejó de hablar');
         setIsSpeaking(false);
+        setIsProcessing(false); // Ya no está procesando
         // Limpiar subtítulo cuando termina de hablar
         clearSubtitle();
         // Notificar al servidor
         if (socketRef.current) {
           socketRef.current.emit('avatar-stop-talking');
         }
+      });
+
+      // Eventos de detección de voz del usuario (para feedback inmediato)
+      avatarInstance.on(StreamingEvents.USER_START, () => {
+        console.log('👤 Usuario empezó a hablar');
+        setUserSpeaking(true);
+        setIsProcessing(false);
+      });
+
+      avatarInstance.on(StreamingEvents.USER_STOP, () => {
+        console.log('👤 Usuario dejó de hablar');
+        setUserSpeaking(false);
+        // Mostrar "pensando" inmediatamente después de que el usuario termine
+        setIsProcessing(true);
+      });
+
+      avatarInstance.on(StreamingEvents.USER_SILENCE, () => {
+        console.log('🤫 Silencio detectado');
+        setUserSpeaking(false);
       });
 
       // Iniciar avatar
@@ -316,10 +341,38 @@ const AvatarView: React.FC = () => {
 
     } catch (error) {
       console.error('❌ Error al inicializar avatar:', error);
-      setError(error instanceof Error ? error.message : 'Error desconocido');
+
+      // Extraer detalles del error de HeyGen
+      let errorMessage = 'Error desconocido';
+      let errorDetails = '';
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // Intentar parsear detalles adicionales del error
+        try {
+          const errorString = error.toString();
+          console.error('🔍 Error completo:', errorString);
+          console.error('🔍 Error stack:', error.stack);
+
+          // Si el error tiene propiedades adicionales
+          if ((error as any).response) {
+            console.error('🔍 Response del error:', (error as any).response);
+            errorDetails = JSON.stringify((error as any).response);
+          }
+          if ((error as any).data) {
+            console.error('🔍 Data del error:', (error as any).data);
+            errorDetails += ' | Data: ' + JSON.stringify((error as any).data);
+          }
+        } catch (e) {
+          console.error('No se pudo parsear detalles del error');
+        }
+      }
+
+      const fullError = errorDetails ? `${errorMessage} | ${errorDetails}` : errorMessage;
+      setError(fullError);
       setIsLoading(false);
 
-      // Notificar error al servidor
+      // Notificar error al servidor con detalles completos
       if (socketRef.current) {
         socketRef.current.emit('error', {
           message: error instanceof Error ? error.message : 'Error desconocido'
@@ -421,6 +474,7 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
         console.log('🗣️ Avatar empezó a hablar');
         setIsSpeaking(true);
+        setIsProcessing(false);
         // Notificar al servidor
         if (socketRef.current) {
           socketRef.current.emit('avatar-start-talking');
@@ -430,12 +484,31 @@ const AvatarView: React.FC = () => {
       avatarInstance.on(StreamingEvents.AVATAR_STOP_TALKING, () => {
         console.log('🤐 Avatar dejó de hablar');
         setIsSpeaking(false);
+        setIsProcessing(false);
         // Limpiar subtítulo cuando termina de hablar
         clearSubtitle();
         // Notificar al servidor
         if (socketRef.current) {
           socketRef.current.emit('avatar-stop-talking');
         }
+      });
+
+      // Eventos de detección de voz del usuario
+      avatarInstance.on(StreamingEvents.USER_START, () => {
+        console.log('👤 Usuario empezó a hablar');
+        setUserSpeaking(true);
+        setIsProcessing(false);
+      });
+
+      avatarInstance.on(StreamingEvents.USER_STOP, () => {
+        console.log('👤 Usuario dejó de hablar');
+        setUserSpeaking(false);
+        setIsProcessing(true);
+      });
+
+      avatarInstance.on(StreamingEvents.USER_SILENCE, () => {
+        console.log('🤫 Silencio detectado');
+        setUserSpeaking(false);
       });
 
       // Iniciar nuevo avatar
@@ -502,18 +575,22 @@ const AvatarView: React.FC = () => {
     }
 
     try {
-      // Safari iOS no soporta navigator.permissions.query para micrófono
-      // Intentar directamente getUserMedia y manejar errores
-      console.log('🎤 Solicitando acceso al micrófono...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('✅ Permisos de micrófono concedidos');
-
-      // Detener el stream de prueba
-      stream.getTracks().forEach(track => track.stop());
+      // Solo solicitar permisos si aún no se han concedido (optimización de latencia)
+      if (!microphonePermissionGranted.current) {
+        console.log('🎤 Solicitando acceso al micrófono...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('✅ Permisos de micrófono concedidos');
+        stream.getTracks().forEach(track => track.stop());
+        microphonePermissionGranted.current = true;
+      } else {
+        console.log('✅ Usando permisos de micrófono pre-concedidos');
+      }
 
       console.log('🎤 Llamando a currentAvatar.startVoiceChat()...');
       const result = await currentAvatar.startVoiceChat();
       console.log('🎤 Resultado de startVoiceChat():', result);
+
+      // Batch state updates para reducir re-renders
       setIsListening(true);
       setPendingVoiceChatRequest(false);
       console.log('✅ Chat de voz iniciado correctamente');
@@ -645,6 +722,19 @@ const AvatarView: React.FC = () => {
     setShowAudioButton(false);
     audioActivatedOnce.current = true;
 
+    // Pre-solicitar permisos de micrófono para reducir latencia en chat de voz
+    if (!microphonePermissionGranted.current) {
+      try {
+        console.log('🎤 Pre-solicitando permisos de micrófono...');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        microphonePermissionGranted.current = true;
+        console.log('✅ Permisos de micrófono pre-concedidos');
+      } catch (err) {
+        console.log('⚠️ No se pudieron pre-solicitar permisos de micrófono:', err);
+      }
+    }
+
     // Inicializar el avatar DESPUÉS del gesto de usuario
     await initializeAvatar();
   };
@@ -772,6 +862,58 @@ const AvatarView: React.FC = () => {
               animation: 'pulse 1s ease-in-out infinite'
             }}></span>
             🎤 Micrófono Activo
+          </div>
+        )}
+
+        {/* Indicador de usuario hablando */}
+        {userSpeaking && (
+          <div style={{
+            padding: '10px 20px',
+            backgroundColor: 'rgba(255, 193, 7, 0.95)',
+            color: 'white',
+            borderRadius: '25px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 15px rgba(255, 193, 7, 0.5)',
+            animation: 'pulse 1s ease-in-out infinite'
+          }}>
+            <span style={{
+              width: '10px',
+              height: '10px',
+              backgroundColor: 'white',
+              borderRadius: '50%',
+              animation: 'pulse 0.6s ease-in-out infinite'
+            }}></span>
+            👤 Te escucho...
+          </div>
+        )}
+
+        {/* Indicador de procesando */}
+        {isProcessing && !isSpeaking && (
+          <div style={{
+            padding: '10px 20px',
+            backgroundColor: 'rgba(156, 39, 176, 0.95)',
+            color: 'white',
+            borderRadius: '25px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 15px rgba(156, 39, 176, 0.5)'
+          }}>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              border: '2px solid white',
+              borderTop: '2px solid transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite'
+            }}></div>
+            💭 Pensando...
           </div>
         )}
 

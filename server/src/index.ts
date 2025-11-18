@@ -20,15 +20,15 @@ const io = new Server(httpServer, {
     origin: process.env.CLIENT_URL || '*',
     methods: ['GET', 'POST']
   },
-  // Optimizaciones de Socket.IO
+  // Optimizaciones de Socket.IO para menor latencia
   transports: ['websocket', 'polling'],
   allowUpgrades: true,
-  pingTimeout: 60000,
+  pingTimeout: 20000, // Reducido de 60s a 20s para detectar desconexiones más rápido
   pingInterval: 25000,
   upgradeTimeout: 10000,
   maxHttpBufferSize: 1e6, // 1MB
   perMessageDeflate: {
-    threshold: 1024 // Comprimir mensajes > 1KB
+    threshold: 4096 // Aumentado de 1KB a 4KB - no comprimir mensajes pequeños
   }
 });
 
@@ -74,6 +74,8 @@ app.post('/api/get-token', async (req, res) => {
     }
 
     console.log('🔑 Solicitando nuevo token a HeyGen...');
+    console.log('🔑 API Key (primeros 10 chars):', (process.env.HEYGEN_API_KEY || '').substring(0, 10) + '...');
+
     const response = await fetch('https://api.heygen.com/v1/streaming.create_token', {
       method: 'POST',
       headers: {
@@ -82,13 +84,24 @@ app.post('/api/get-token', async (req, res) => {
       }
     });
 
+    console.log('📡 Status de respuesta de HeyGen:', response.status, response.statusText);
+
     const data = await response.json();
+    console.log('📦 Respuesta completa de HeyGen:', JSON.stringify(data, null, 2));
 
     // Verificar si la respuesta tiene errores
     if (data.error) {
-      console.error('❌ Error de HeyGen API:', data.error);
+      console.error('❌ Error de HeyGen API:', JSON.stringify(data.error, null, 2));
       tokenCache = null; // Limpiar cache en caso de error
       return res.status(400).json({ error: data.error });
+    }
+
+    // Si el status code no es 200, también es error
+    if (response.status !== 200) {
+      console.error('❌ Status code no exitoso:', response.status);
+      console.error('❌ Data recibida:', JSON.stringify(data, null, 2));
+      tokenCache = null;
+      return res.status(response.status).json({ error: data });
     }
 
     // Extraer el token del objeto data
