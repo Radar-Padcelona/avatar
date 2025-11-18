@@ -487,6 +487,11 @@ const ControlPanel: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  // Si estamos en modo streaming y el chat de voz está activo, detenerlo primero
+                  if (interactionMode === 'streaming' && isListening) {
+                    console.log('🛑 Deteniendo chat de voz antes de cambiar a modo texto');
+                    handleStopVoiceChat();
+                  }
                   setInteractionMode('text');
                   addStatusMessage('info', '📝 Modo cambiado a: Texto');
                 }}

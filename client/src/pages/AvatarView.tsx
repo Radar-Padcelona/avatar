@@ -574,9 +574,9 @@ const AvatarView: React.FC = () => {
       // Limpiar avatar actual (incluye 3 segundos de espera interna + forzado de cierre via API)
       await cleanupAvatar();
 
-      // Esperar solo 2 segundos ya que estamos forzando el cierre de sesión
-      console.log('⏳ Esperando 2 segundos para confirmar cierre de sesión...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Esperar 4 segundos para dar tiempo a HeyGen a liberar la sesión completamente
+      console.log('⏳ Esperando 4 segundos para confirmar cierre de sesión...');
+      await new Promise(resolve => setTimeout(resolve, 4000));
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
