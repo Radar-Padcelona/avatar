@@ -23,10 +23,28 @@ const AvatarView: React.FC = () => {
   const [pendingVoiceChatRequest, setPendingVoiceChatRequest] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Nuevo: indica cuando está procesando la respuesta
   const [userSpeaking, setUserSpeaking] = useState(false); // Nuevo: indica cuando el usuario está hablando
+  const [showAvatarSelector, setShowAvatarSelector] = useState(true); // Mostrar selector antes de iniciar
+  const [selectedInitialAvatar, setSelectedInitialAvatar] = useState<string>('Dexter_Doctor_Standing2_public');
   const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullTextRef = useRef<string>('');
   const microphonePermissionGranted = useRef<boolean>(false);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Configuración de avatares disponibles
+  const availableAvatars = [
+    {
+      id: 'Dexter_Doctor_Standing2_public',
+      name: 'Doctor Dexter',
+      description: 'Avatar médico profesional',
+      icon: '👨‍⚕️'
+    },
+    {
+      id: 'Ann_Therapist_public',
+      name: 'CEO Ann',
+      description: 'Avatar ejecutivo empresarial',
+      icon: '👩‍💼'
+    }
+  ];
 
   // Detectar si es Safari iOS
   const isSafariIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
@@ -218,6 +236,36 @@ const AvatarView: React.FC = () => {
       setError(null);
 
       const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+
+      // Solicitar cambio de avatar inicial si es diferente a Dexter
+      if (selectedInitialAvatar !== 'Dexter_Doctor_Standing2_public' && socketRef.current) {
+        console.log(`🎯 Cambiando a avatar inicial seleccionado: ${selectedInitialAvatar}`);
+        const avatarConfigs: Record<string, any> = {
+          'Dexter_Doctor_Standing2_public': {
+            avatarId: 'Dexter_Doctor_Standing2_public',
+            voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
+            knowledgeBase: 'Jefe de Clientes Globales y Excelencia en Tecnologías de Fertilidad...',
+            backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+            quality: 'high',
+            aspectRatio: '16:9'
+          },
+          'Ann_Therapist_public': {
+            avatarId: 'Ann_Therapist_public',
+            voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
+            knowledgeBase: 'Eres una experta en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
+            backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+            quality: 'high',
+            aspectRatio: '16:9'
+          }
+        };
+
+        const config = avatarConfigs[selectedInitialAvatar];
+        if (config) {
+          socketRef.current.emit('change-avatar', config);
+          // Dar tiempo para que el servidor actualice
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
 
       // Obtener token
       console.log('🔑 Obteniendo token de HeyGen...');
@@ -720,6 +768,7 @@ const AvatarView: React.FC = () => {
     // Marcar que el audio ya se activó
     setAudioEnabled(true);
     setShowAudioButton(false);
+    setShowAvatarSelector(false); // Ocultar selector de avatar
     audioActivatedOnce.current = true;
 
     // Pre-solicitar permisos de micrófono para reducir latencia en chat de voz
@@ -1017,6 +1066,87 @@ const AvatarView: React.FC = () => {
           zIndex: 30,
           textAlign: 'center'
         }}>
+          {/* Avatar Selector */}
+          {showAvatarSelector && (
+            <div style={{
+              marginBottom: '30px'
+            }}>
+              <h3 style={{
+                color: 'white',
+                fontSize: '18px',
+                marginBottom: '20px',
+                fontWeight: '600'
+              }}>
+                Selecciona tu avatar
+              </h3>
+              <div style={{
+                display: 'flex',
+                gap: '20px',
+                justifyContent: 'center',
+                flexWrap: 'wrap'
+              }}>
+                {availableAvatars.map((avatar) => (
+                  <div
+                    key={avatar.id}
+                    onClick={() => setSelectedInitialAvatar(avatar.id)}
+                    style={{
+                      width: '200px',
+                      padding: '20px',
+                      backgroundColor: selectedInitialAvatar === avatar.id
+                        ? 'rgba(102, 126, 234, 0.9)'
+                        : 'rgba(255, 255, 255, 0.1)',
+                      border: selectedInitialAvatar === avatar.id
+                        ? '3px solid #667eea'
+                        : '2px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '15px',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      backdropFilter: 'blur(10px)',
+                      transform: selectedInitialAvatar === avatar.id ? 'scale(1.05)' : 'scale(1)',
+                      boxShadow: selectedInitialAvatar === avatar.id
+                        ? '0 8px 20px rgba(102, 126, 234, 0.5)'
+                        : '0 4px 10px rgba(0, 0, 0, 0.2)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedInitialAvatar !== avatar.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                        e.currentTarget.style.transform = 'scale(1.02)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedInitialAvatar !== avatar.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }
+                    }}
+                  >
+                    <div style={{
+                      fontSize: '48px',
+                      marginBottom: '10px'
+                    }}>
+                      {avatar.icon}
+                    </div>
+                    <div style={{
+                      color: 'white',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      marginBottom: '8px'
+                    }}>
+                      {avatar.name}
+                    </div>
+                    <div style={{
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontSize: '13px',
+                      lineHeight: '1.4'
+                    }}>
+                      {avatar.description}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleEnableAudio}
             style={{

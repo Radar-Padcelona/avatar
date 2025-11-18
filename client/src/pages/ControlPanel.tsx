@@ -33,7 +33,7 @@ const ControlPanel: React.FC = () => {
   // Estados editables para los avatares
   const [avatarConfigs, setAvatarConfigs] = useState<AvatarConfig[]>([
     {
-      name: '👨‍⚕️ Doctor Dexter',
+      name: 'Doctor Dexter',
       avatarId: 'Dexter_Doctor_Standing2_public',
       voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
       description: 'Avatar médico profesional',
@@ -45,7 +45,7 @@ const ControlPanel: React.FC = () => {
       aspectRatio: '16:9'
     },
     {
-      name: '👔 CEO Ann',
+      name: 'CEO Ann',
       avatarId: 'Ann_Therapist_public',
       voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
       description: 'Avatar ejecutivo empresarial',
