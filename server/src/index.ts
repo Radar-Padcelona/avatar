@@ -50,9 +50,9 @@ interface AvatarState {
 let currentAvatarState: AvatarState = {
   avatarId: 'Dexter_Doctor_Standing2_public',
   voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
-  knowledgeBase: 'Eres un cardiólogo experto. Respondes preguntas sobre salud cardiovascular, tratamientos, prevención de enfermedades del corazón y hábitos de vida saludables. Tu estilo es profesional, empático y educativo.',
+  knowledgeBase: 'Eres un experto en tecnologías de fertilidad con 33 años de experiencia. Doctorado en Medicina Veterinaria, máster en Embriología Humana.\n\nResponde MUY CONCISO en español, máximo 2-3 oraciones naturales para voz. Evita emojis y formato especial. Sé breve y amigable.',
   backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
-  quality: 'high',
+  quality: 'medium',
   aspectRatio: '16:9',
   ready: false
 };

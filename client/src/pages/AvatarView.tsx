@@ -64,10 +64,13 @@ const AvatarView: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
-  const initializingRef = useRef<boolean>(false);
+  const socketInitializedRef = useRef<boolean>(false); // Para evitar doble init del socket
+  const initializingAvatarRef = useRef<boolean>(false); // Para evitar doble init del avatar
   const avatarRef = useRef<StreamingAvatar | null>(null);
   const audioActivatedOnce = useRef<boolean>(false);
   const isChangingAvatar = useRef<boolean>(false);
+  const currentAvatarIdRef = useRef<string>('Dexter_Doctor_Standing2_public'); // Ref síncrona del avatar actual
+  const pendingServerNotification = useRef<any>(null); // Config pendiente para notificar al servidor
 
   // Auto-limpieza de errores después de 5 segundos
   useEffect(() => {
@@ -160,8 +163,8 @@ const AvatarView: React.FC = () => {
   // Inicialización del socket
   useEffect(() => {
     // Evitar doble inicialización en React Strict Mode
-    if (initializingRef.current) return;
-    initializingRef.current = true;
+    if (socketInitializedRef.current) return;
+    socketInitializedRef.current = true;
 
     // Log de detección de Safari iOS
     if (isSafariIOS) {
@@ -220,7 +223,7 @@ const AvatarView: React.FC = () => {
     });
 
     return () => {
-      initializingRef.current = false;
+      socketInitializedRef.current = false;
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
@@ -231,40 +234,65 @@ const AvatarView: React.FC = () => {
   }, []);
 
   const initializeAvatar = async () => {
+    // Protección contra inicializaciones múltiples
+    if (initializingAvatarRef.current) {
+      console.log('⚠️ Ya hay una inicialización de avatar en curso, ignorando...');
+      return;
+    }
+
     try {
+      initializingAvatarRef.current = true;
       setIsLoading(true);
       setError(null);
 
       const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
 
-      // Solicitar cambio de avatar inicial si es diferente a Dexter
-      if (selectedInitialAvatar !== 'Dexter_Doctor_Standing2_public' && socketRef.current) {
-        console.log(`🎯 Cambiando a avatar inicial seleccionado: ${selectedInitialAvatar}`);
-        const avatarConfigs: Record<string, any> = {
-          'Dexter_Doctor_Standing2_public': {
-            avatarId: 'Dexter_Doctor_Standing2_public',
-            voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
-            knowledgeBase: 'Jefe de Clientes Globales y Excelencia en Tecnologías de Fertilidad...',
-            backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
-            quality: 'high',
-            aspectRatio: '16:9'
-          },
-          'Ann_Therapist_public': {
-            avatarId: 'Ann_Therapist_public',
-            voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
-            knowledgeBase: 'Eres una experta en finanzas y estrategia empresarial. Ayudas con análisis de negocios, inversiones, gestión financiera y decisiones estratégicas. Tu estilo es analítico, profesional y orientado a resultados.',
-            backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
-            quality: 'high',
-            aspectRatio: '16:9'
-          }
-        };
-
-        const config = avatarConfigs[selectedInitialAvatar];
-        if (config) {
-          socketRef.current.emit('change-avatar', config);
-          // Dar tiempo para que el servidor actualice
-          await new Promise(resolve => setTimeout(resolve, 300));
+      // Configuración de avatares locales (para usar si es diferente al default del servidor)
+      const avatarConfigs: Record<string, any> = {
+        'Dexter_Doctor_Standing2_public': {
+          avatarId: 'Dexter_Doctor_Standing2_public',
+          voiceId: '7d51b57751f54a2c8ea646713cc2dd96',
+          knowledgeBase: 'Eres un experto en tecnologías de fertilidad con 33 años de experiencia. Doctorado en Medicina Veterinaria, máster en Embriología Humana.\n\nResponde MUY CONCISO en español, máximo 2-3 oraciones naturales para voz. Evita emojis y formato especial. Sé breve y amigable.',
+          backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+          quality: 'medium',
+          aspectRatio: '16:9'
+        },
+        'Ann_Therapist_public': {
+          avatarId: 'Ann_Therapist_public',
+          voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
+          knowledgeBase: 'Experta en finanzas y estrategia empresarial. Análisis de negocios, inversiones y decisiones estratégicas. Estilo analítico y profesional.\n\nResponde MUY CONCISO en español, máximo 2-3 oraciones naturales para voz. Evita emojis y formato especial. Sé breve y amigable.',
+          backgroundUrl: 'https://www.padcelona.com/wp-content/uploads/2022/01/padcelona-social.png',
+          quality: 'medium',
+          aspectRatio: '16:9'
         }
+      };
+
+      // Si seleccionaste un avatar diferente al inicial, usa la config local
+      let avatarState;
+      if (selectedInitialAvatar !== 'Dexter_Doctor_Standing2_public') {
+        console.log(`🎯 Usando configuración local para avatar seleccionado: ${selectedInitialAvatar}`);
+        avatarState = avatarConfigs[selectedInitialAvatar];
+
+        // Actualizar estado local y ref
+        currentAvatarIdRef.current = selectedInitialAvatar;
+        setCurrentAvatarId(selectedInitialAvatar);
+        setBackgroundUrl(avatarState.backgroundUrl || '');
+        setAspectRatio(avatarState.aspectRatio || '16:9');
+
+        // Guardar config para notificar al servidor DESPUÉS de cargar exitosamente
+        pendingServerNotification.current = avatarState;
+      } else {
+        // Obtener estado del servidor si usamos el default
+        console.log('📊 Obteniendo estado del avatar del servidor...');
+        const stateResponse = await fetch(`${serverUrl}/api/avatar-state`);
+        avatarState = await stateResponse.json();
+
+        console.log('📦 Estado recibido del servidor:', JSON.stringify(avatarState, null, 2));
+
+        currentAvatarIdRef.current = avatarState.avatarId;
+        setCurrentAvatarId(avatarState.avatarId);
+        setBackgroundUrl(avatarState.backgroundUrl || '');
+        setAspectRatio(avatarState.aspectRatio || '16:9');
       }
 
       // Obtener token
@@ -278,14 +306,6 @@ const AvatarView: React.FC = () => {
       }
 
       const { token } = await tokenResponse.json();
-
-      // Obtener estado actual del avatar
-      console.log('📊 Obteniendo estado del avatar...');
-      const stateResponse = await fetch(`${serverUrl}/api/avatar-state`);
-      const avatarState = await stateResponse.json();
-      setCurrentAvatarId(avatarState.avatarId);
-      setBackgroundUrl(avatarState.backgroundUrl || '');
-      setAspectRatio(avatarState.aspectRatio || '16:9');
 
       // Crear instancia del avatar
       console.log('🎭 Creando instancia del avatar...');
@@ -305,7 +325,17 @@ const AvatarView: React.FC = () => {
 
             // Notificar al servidor que el avatar está listo
             if (socketRef.current) {
+              // Si hay un cambio de avatar pendiente, notificarlo primero
+              if (pendingServerNotification.current) {
+                console.log('📡 Notificando cambio de avatar al servidor:', pendingServerNotification.current.avatarId);
+                socketRef.current.emit('change-avatar', pendingServerNotification.current);
+                pendingServerNotification.current = null;
+              }
+
+              console.log('📡 Emitiendo evento avatar-ready al servidor');
               socketRef.current.emit('avatar-ready');
+            } else {
+              console.warn('⚠️ No hay conexión socket para emitir avatar-ready');
             }
           }).catch(err => {
             console.log('⚠️ Error en autoplay:', err);
@@ -323,8 +353,11 @@ const AvatarView: React.FC = () => {
 
       avatarInstance.on(StreamingEvents.AVATAR_START_TALKING, () => {
         console.log('🗣️ Avatar empezó a hablar');
-        setIsSpeaking(true);
-        setIsProcessing(false); // Ya no está procesando, está hablando
+        // Batch state updates para reducir re-renders
+        React.startTransition(() => {
+          setIsSpeaking(true);
+          setIsProcessing(false);
+        });
         // Notificar al servidor para sincronizar con el panel de control
         if (socketRef.current) {
           socketRef.current.emit('avatar-start-talking');
@@ -346,15 +379,20 @@ const AvatarView: React.FC = () => {
       // Eventos de detección de voz del usuario (para feedback inmediato)
       avatarInstance.on(StreamingEvents.USER_START, () => {
         console.log('👤 Usuario empezó a hablar');
-        setUserSpeaking(true);
-        setIsProcessing(false);
+        // Batch state updates
+        React.startTransition(() => {
+          setUserSpeaking(true);
+          setIsProcessing(false);
+        });
       });
 
       avatarInstance.on(StreamingEvents.USER_STOP, () => {
         console.log('👤 Usuario dejó de hablar');
-        setUserSpeaking(false);
-        // Mostrar "pensando" inmediatamente después de que el usuario termine
-        setIsProcessing(true);
+        // Batch state updates - mostrar "pensando" inmediatamente
+        React.startTransition(() => {
+          setUserSpeaking(false);
+          setIsProcessing(true);
+        });
       });
 
       avatarInstance.on(StreamingEvents.USER_SILENCE, () => {
@@ -375,20 +413,28 @@ const AvatarView: React.FC = () => {
       };
       const quality = qualityMap[(avatarState as any).quality || 'high'] || AvatarQuality.High;
 
-      await avatarInstance.createStartAvatar({
+      // Log detallado de parámetros antes de enviar a HeyGen
+      const createParams = {
         avatarName: avatarState.avatarId,
         voice: {
           voiceId: avatarState.voiceId,
-          rate: 1.0,
+          rate: 1.15, // Velocidad aumentada para respuestas más rápidas
           emotion: VoiceEmotion.FRIENDLY
         },
         quality: quality,
         language: 'es',
         knowledgeBase: avatarState.knowledgeBase || 'Eres un asistente útil y amigable.'
-      });
+      };
+      console.log('📤 Parámetros a enviar a HeyGen API:', JSON.stringify(createParams, null, 2));
+
+      await avatarInstance.createStartAvatar(createParams);
+
+      console.log('✅ Avatar iniciado exitosamente');
+      initializingAvatarRef.current = false; // Liberar el flag
 
     } catch (error) {
       console.error('❌ Error al inicializar avatar:', error);
+      initializingAvatarRef.current = false; // Liberar el flag en caso de error
 
       // Extraer detalles del error de HeyGen
       let errorMessage = 'Error desconocido';
@@ -416,8 +462,14 @@ const AvatarView: React.FC = () => {
         }
       }
 
-      const fullError = errorDetails ? `${errorMessage} | ${errorDetails}` : errorMessage;
-      setError(fullError);
+      // Mensaje especial para error 503
+      let displayError = errorDetails ? `${errorMessage} | ${errorDetails}` : errorMessage;
+      if (errorMessage.includes('503')) {
+        displayError = 'Servicio de HeyGen temporalmente no disponible. Por favor espera 1-2 minutos e intenta de nuevo.';
+        console.warn('⚠️ Error 503: Probablemente límite de rate o sesiones concurrentes alcanzado');
+      }
+
+      setError(displayError);
       setIsLoading(false);
 
       // Notificar error al servidor con detalles completos
@@ -436,10 +488,16 @@ const AvatarView: React.FC = () => {
       return;
     }
 
+    // Prevenir cambios si ya estamos en ese avatar (usar ref para verificación síncrona)
+    if (currentAvatarIdRef.current === newState.avatarId) {
+      console.log(`⚠️ Ya estamos usando el avatar ${newState.avatarId}, ignorando cambio`);
+      return;
+    }
+
     isChangingAvatar.current = true;
 
     try {
-      console.log(`🔄 [AVATAR] Cambiando a avatar: ${newState.avatarId}`);
+      console.log(`🔄 [AVATAR] Cambiando de ${currentAvatarId} a avatar: ${newState.avatarId}`);
       setIsLoading(true);
       setError(null);
 
@@ -456,7 +514,8 @@ const AvatarView: React.FC = () => {
 
       // Esperar un momento para asegurar que el stream anterior se cierre completamente
       // HeyGen necesita tiempo para liberar la sesión anterior
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('⏳ Esperando 3 segundos para que HeyGen libere la sesión anterior...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
@@ -563,6 +622,7 @@ const AvatarView: React.FC = () => {
       console.log(`🚀 Iniciando nuevo avatar: ${newState.avatarId}`);
       console.log(`🧠 Nuevo Knowledge Base: ${newState.knowledgeBase}`);
       console.log(`🎥 Nueva Calidad: ${newState.quality || 'high'}`);
+      console.log(`📦 Estado completo recibido para cambio:`, JSON.stringify(newState, null, 2));
 
       // Mapear calidad del servidor a enum de HeyGen
       const qualityMap: { [key: string]: AvatarQuality } = {
@@ -572,32 +632,45 @@ const AvatarView: React.FC = () => {
       };
       const quality = qualityMap[newState.quality || 'high'] || AvatarQuality.High;
 
-      await avatarInstance.createStartAvatar({
+      const changeParams = {
         avatarName: newState.avatarId,
         voice: {
           voiceId: newState.voiceId,
-          rate: 1.0,
+          rate: 1.15, // Velocidad aumentada para respuestas más rápidas
           emotion: VoiceEmotion.FRIENDLY
         },
         quality: quality,
         language: 'es',
         knowledgeBase: newState.knowledgeBase || 'Eres un asistente útil y amigable.'
-      });
+      };
+      console.log('📤 Parámetros de cambio a enviar a HeyGen API:', JSON.stringify(changeParams, null, 2));
 
+      await avatarInstance.createStartAvatar(changeParams);
+
+      currentAvatarIdRef.current = newState.avatarId;
       setCurrentAvatarId(newState.avatarId);
       setBackgroundUrl(newState.backgroundUrl || '');
       setAspectRatio(newState.aspectRatio || '16:9');
 
     } catch (error) {
       console.error('❌ Error al cambiar avatar:', error);
-      setError(error instanceof Error ? error.message : 'Error al cambiar avatar');
+
+      let errorMsg = error instanceof Error ? error.message : 'Error al cambiar avatar';
+
+      // Mensaje especial para error 503
+      if (errorMsg.includes('503')) {
+        errorMsg = 'Servicio de HeyGen temporalmente no disponible. Espera 1-2 minutos e intenta de nuevo.';
+        console.warn('⚠️ Error 503 al cambiar avatar: Límite de rate o sesiones alcanzado');
+      }
+
+      setError(errorMsg);
       setIsLoading(false);
       isChangingAvatar.current = false;
 
       // Notificar error
       if (socketRef.current) {
         socketRef.current.emit('error', {
-          message: error instanceof Error ? error.message : 'Error al cambiar avatar'
+          message: errorMsg
         });
       }
     }
@@ -1172,14 +1245,6 @@ const AvatarView: React.FC = () => {
           >
             🎬 Iniciar Avatar
           </button>
-          <p style={{
-            color: 'white',
-            marginTop: '15px',
-            fontSize: '14px',
-            opacity: 0.9
-          }}>
-            Haz clic para cargar el avatar con audio
-          </p>
         </div>
       )}
 

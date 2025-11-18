@@ -118,10 +118,11 @@ const ControlPanel: React.FC = () => {
     });
 
     socketInstance.on('avatar-ready', () => {
+      console.log('🎯 [CONTROL PANEL] Evento avatar-ready recibido');
       setIsAvatarReady(true);
       setIsChangingAvatar(false);
       addStatusMessage('success', '✅ Avatar listo');
-      console.log('✅ Avatar listo');
+      console.log('✅ Avatar listo - isAvatarReady=true');
     });
 
     socketInstance.on('avatar-change-start', () => {
@@ -800,6 +801,7 @@ const ControlPanel: React.FC = () => {
                   onClick={() => handleSendText('INTERRUPT')}
                   disabled={!textInput.trim() || !isSpeaking}
                   style={{
+                    display: 'none',
                     width: '100%',
                     padding: '12px',
                     fontSize: '16px',
@@ -832,7 +834,6 @@ const ControlPanel: React.FC = () => {
                   fontStyle: 'italic',
                   lineHeight: '1.5'
                 }}>
-                  💡 Tip: Usa "Interrumpir" para cambiar el tema mientras Ann está hablando
                 </p>
               </div>
             )}
