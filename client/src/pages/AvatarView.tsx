@@ -153,19 +153,47 @@ const AvatarView: React.FC = () => {
         console.log('🎥 Stream listo');
         if (videoRef.current && event?.detail) {
           videoRef.current.srcObject = event.detail;
-          videoRef.current.muted = false;
-          videoRef.current.play().then(() => {
-            console.log('✅ Video reproduciéndose con audio');
-            setIsLoading(false);
 
-            // Notificar que el avatar está listo
-            if (socketRef.current) {
-              socketRef.current.emit('avatar-ready');
-            }
-          }).catch(err => {
-            console.log('⚠️ Error en autoplay:', err);
-            setIsLoading(false);
-          });
+          // Intentar reproducir con audio si ya está activado
+          if (audioEnabled) {
+            videoRef.current.muted = false;
+            videoRef.current.play().then(() => {
+              console.log('✅ Video reproduciéndose con audio');
+              setIsLoading(false);
+              if (socketRef.current) {
+                socketRef.current.emit('avatar-ready');
+              }
+            }).catch(err => {
+              // Si falla con audio, intentar sin audio
+              console.log('⚠️ Error en autoplay con audio, reintentando sin audio...');
+              if (videoRef.current) {
+                videoRef.current.muted = true;
+                videoRef.current.play().then(() => {
+                  console.log('✅ Video reproduciéndose sin audio (click para activar)');
+                  setIsLoading(false);
+                  if (socketRef.current) {
+                    socketRef.current.emit('avatar-ready');
+                  }
+                }).catch(err2 => {
+                  console.error('❌ Error en autoplay:', err2);
+                  setIsLoading(false);
+                });
+              }
+            });
+          } else {
+            // Si el audio no está activado, reproducir sin audio
+            videoRef.current.muted = true;
+            videoRef.current.play().then(() => {
+              console.log('✅ Video reproduciéndose sin audio');
+              setIsLoading(false);
+              if (socketRef.current) {
+                socketRef.current.emit('avatar-ready');
+              }
+            }).catch(err => {
+              console.error('❌ Error en autoplay:', err);
+              setIsLoading(false);
+            });
+          }
         }
       });
 
