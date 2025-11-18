@@ -16,11 +16,11 @@ let tokenCache: TokenCache | null = null;
 const app = express();
 const httpServer = createServer(app);
 // Configuración de CORS - permitir múltiples orígenes
-const allowedOrigins = [
+const allowedOrigins: string[] = [
   process.env.CLIENT_URL,
   'https://avatar.wearebrave.net',
   'http://localhost:3000'
-].filter(Boolean);
+].filter((origin): origin is string => typeof origin === 'string' && origin.length > 0);
 
 const io = new Server(httpServer, {
   cors: {
