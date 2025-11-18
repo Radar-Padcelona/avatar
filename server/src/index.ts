@@ -187,6 +187,54 @@ app.post('/api/force-close-session', async (req, res) => {
   }
 });
 
+// Endpoint para obtener las voces disponibles
+app.get('/api/voices', async (req, res) => {
+  try {
+    console.log('🎤 Obteniendo lista de voces disponibles...');
+
+    const response = await fetch('https://api.heygen.com/v2/voices', {
+      method: 'GET',
+      headers: {
+        'x-api-key': process.env.HEYGEN_API_KEY || '',
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.error('❌ Error al obtener voces:', response.status, response.statusText);
+      return res.status(response.status).json({ error: 'Error al obtener voces de HeyGen' });
+    }
+
+    const data = await response.json();
+
+    if (data && data.data && data.data.voices) {
+      // Filtrar solo las voces compatibles con avatares interactivos
+      const interactiveVoices = data.data.voices.filter((voice: any) =>
+        voice.support_interactive_avatar === true
+      );
+
+      console.log(`✅ ${interactiveVoices.length} voces compatibles con avatares interactivos encontradas`);
+
+      // Devolver solo la información relevante
+      const voices = interactiveVoices.map((voice: any) => ({
+        voice_id: voice.voice_id,
+        name: voice.name,
+        language: voice.language,
+        gender: voice.gender,
+        preview_audio: voice.preview_audio
+      }));
+
+      res.json({ voices });
+    } else {
+      console.error('❌ Respuesta inesperada:', data);
+      res.status(500).json({ error: 'Formato de respuesta inesperado' });
+    }
+  } catch (error) {
+    console.error('❌ Error al obtener voces:', error);
+    res.status(500).json({ error: 'Error al obtener voces' });
+  }
+});
+
 // Endpoint para limpiar todas las sesiones activas
 app.post('/api/cleanup-sessions', async (req, res) => {
   try {
