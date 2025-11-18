@@ -15,10 +15,18 @@ let tokenCache: TokenCache | null = null;
 
 const app = express();
 const httpServer = createServer(app);
+// Configuración de CORS - permitir múltiples orígenes
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'https://avatar.wearebrave.net',
+  'http://localhost:3000'
+].filter(Boolean);
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || '*',
-    methods: ['GET', 'POST']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
   },
   // Optimizaciones de Socket.IO para menor latencia
   transports: ['websocket', 'polling'],
@@ -32,7 +40,11 @@ const io = new Server(httpServer, {
   }
 });
 
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Interfaz para el estado del avatar
