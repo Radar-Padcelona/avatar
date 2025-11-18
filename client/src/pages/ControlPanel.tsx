@@ -454,7 +454,7 @@ const ControlPanel: React.FC = () => {
                 />
               </div>
 
-              {/* Voice ID - Solo lectura para presets, selector para personalizado */}
+              {/* Voice ID - Input para presets, selector para personalizado */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555', fontSize: '14px' }}>
                   Voz * {selectedPresetName === 'Personalizado' && isLoadingVoices && <span style={{ fontSize: '12px', color: '#999' }}>(Cargando...)</span>}
@@ -536,21 +536,19 @@ const ControlPanel: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  // Campo de solo lectura para Doctor Dexter y Ann
+                  // Input editable pre-rellenado para Doctor Dexter y Ann
                   <input
                     type="text"
                     value={currentConfig.voiceId}
-                    readOnly
+                    onChange={(e) => setCurrentConfig({ ...currentConfig, voiceId: e.target.value })}
+                    placeholder="Ej: 7d51b57751f54a2c8ea646713cc2dd96"
                     style={{
                       width: '100%',
                       padding: '12px',
                       fontSize: '15px',
                       borderRadius: '8px',
                       border: '2px solid #ddd',
-                      fontFamily: 'monospace',
-                      backgroundColor: '#f8f9fa',
-                      color: '#666',
-                      cursor: 'not-allowed'
+                      fontFamily: 'monospace'
                     }}
                   />
                 )}
