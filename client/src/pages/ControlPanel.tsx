@@ -24,6 +24,14 @@ interface StatusMessage {
   timestamp: number;
 }
 
+interface Voice {
+  voice_id: string;
+  name: string;
+  language: string;
+  gender: string;
+  preview_audio: string | null;
+}
+
 const ControlPanel: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -35,6 +43,11 @@ const ControlPanel: React.FC = () => {
   const [textInput, setTextInput] = useState<string>('');
   const [statusMessages, setStatusMessages] = useState<StatusMessage[]>([]);
   const [interactionMode, setInteractionMode] = useState<'streaming' | 'text'>('streaming');
+
+  // Estados para voces
+  const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+  const [voicesError, setVoicesError] = useState<string | null>(null);
 
   // Estados del formulario
   const [showForm, setShowForm] = useState(false);
@@ -102,6 +115,35 @@ const ControlPanel: React.FC = () => {
     };
     setStatusMessages(prev => [...prev, newMessage].slice(-3));
   }, []);
+
+  // Cargar voces disponibles
+  const loadAvailableVoices = useCallback(async () => {
+    setIsLoadingVoices(true);
+    setVoicesError(null);
+
+    try {
+      const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+      const response = await fetch(`${serverUrl}/api/voices`);
+
+      if (!response.ok) {
+        throw new Error('Error al cargar voces');
+      }
+
+      const data = await response.json();
+      setAvailableVoices(data.voices || []);
+      console.log(`✅ ${data.voices?.length || 0} voces cargadas`);
+    } catch (error) {
+      console.error('❌ Error al cargar voces:', error);
+      setVoicesError('Error al cargar voces disponibles');
+    } finally {
+      setIsLoadingVoices(false);
+    }
+  }, []);
+
+  // Cargar voces al montar el componente
+  useEffect(() => {
+    loadAvailableVoices();
+  }, [loadAvailableVoices]);
 
   // Inicialización del socket
   useEffect(() => {
@@ -412,25 +454,82 @@ const ControlPanel: React.FC = () => {
                 />
               </div>
 
-              {/* Voice ID */}
+              {/* Voice Selector */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555', fontSize: '14px' }}>
-                  Voice ID *
+                  Voz * {isLoadingVoices && <span style={{ fontSize: '12px', color: '#999' }}>(Cargando...)</span>}
                 </label>
-                <input
-                  type="text"
+                {voicesError ? (
+                  <div style={{ padding: '10px', backgroundColor: '#fee', borderRadius: '8px', marginBottom: '10px' }}>
+                    <span style={{ color: '#c33', fontSize: '13px' }}>{voicesError}</span>
+                    <button
+                      onClick={loadAvailableVoices}
+                      style={{
+                        marginLeft: '10px',
+                        padding: '5px 10px',
+                        fontSize: '12px',
+                        backgroundColor: '#667eea',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : null}
+                <select
                   value={currentConfig.voiceId}
                   onChange={(e) => setCurrentConfig({ ...currentConfig, voiceId: e.target.value })}
-                  placeholder="Ej: 7d51b57751f54a2c8ea646713cc2dd96"
+                  disabled={isLoadingVoices}
                   style={{
                     width: '100%',
                     padding: '12px',
                     fontSize: '15px',
                     borderRadius: '8px',
                     border: '2px solid #ddd',
-                    fontFamily: 'monospace'
+                    cursor: isLoadingVoices ? 'wait' : 'pointer',
+                    backgroundColor: isLoadingVoices ? '#f5f5f5' : 'white'
                   }}
-                />
+                >
+                  <option value="">-- Selecciona una voz --</option>
+                  {Object.entries(
+                    availableVoices.reduce((acc, voice) => {
+                      if (!acc[voice.language]) acc[voice.language] = [];
+                      acc[voice.language].push(voice);
+                      return acc;
+                    }, {} as Record<string, Voice[]>)
+                  )
+                    .sort(([langA], [langB]) => {
+                      // Español primero, luego inglés, luego el resto
+                      if (langA === 'Spanish') return -1;
+                      if (langB === 'Spanish') return 1;
+                      if (langA === 'English') return -1;
+                      if (langB === 'English') return 1;
+                      return langA.localeCompare(langB);
+                    })
+                    .map(([language, voices]) => (
+                      <optgroup key={language} label={`${language} (${voices.length})`}>
+                        {voices
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((voice) => (
+                            <option key={voice.voice_id} value={voice.voice_id}>
+                              {voice.name} ({voice.gender})
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                </select>
+                {currentConfig.voiceId && availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio && (
+                  <div style={{ marginTop: '8px' }}>
+                    <audio
+                      controls
+                      style={{ width: '100%', height: '36px' }}
+                      src={availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio || ''}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Quality y Aspect Ratio en la misma fila */}
