@@ -131,6 +131,43 @@ app.get('/api/avatar-state', (req, res) => {
   res.json(currentAvatarState);
 });
 
+// Endpoint para forzar cierre de sesión de HeyGen
+app.post('/api/force-close-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID requerido' });
+    }
+
+    console.log('🔨 Forzando cierre de sesión:', sessionId);
+
+    const response = await fetch(`https://api.heygen.com/v1/streaming.stop`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.HEYGEN_API_KEY || '',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log('✅ Sesión cerrada exitosamente:', sessionId);
+      res.json({ success: true, data });
+    } else {
+      console.warn('⚠️ Error al cerrar sesión:', data);
+      // Aún así devolvemos éxito porque no queremos bloquear
+      res.json({ success: true, warning: 'No se pudo forzar cierre, pero continuando' });
+    }
+  } catch (error) {
+    console.error('❌ Error al forzar cierre de sesión:', error);
+    // No devolvemos error para no bloquear el flujo
+    res.json({ success: true, warning: 'Error en forzar cierre, pero continuando' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -71,6 +71,7 @@ const AvatarView: React.FC = () => {
   const isChangingAvatar = useRef<boolean>(false);
   const currentAvatarIdRef = useRef<string>('Dexter_Doctor_Standing2_public'); // Ref síncrona del avatar actual
   const pendingServerNotification = useRef<any>(null); // Config pendiente para notificar al servidor
+  const currentSessionId = useRef<string | null>(null); // Session ID del avatar actual para forzar cierre
 
   // Auto-limpieza de errores después de 5 segundos
   useEffect(() => {
@@ -133,10 +134,15 @@ const AvatarView: React.FC = () => {
   // Limpieza del avatar
   const cleanupAvatar = useCallback(async () => {
     const currentAvatar = avatarRef.current;
+    const sessionId = currentSessionId.current;
+
     if (!currentAvatar) return;
 
     try {
       console.log('🧹 Limpiando avatar anterior...');
+      if (sessionId) {
+        console.log('🆔 Session ID:', sessionId);
+      }
 
       // Detener chat de voz si está activo
       if (isListening) {
@@ -157,7 +163,23 @@ const AvatarView: React.FC = () => {
         console.log('✅ Avatar detenido');
       } catch (err) {
         // Error de CORS es común al detener - HeyGen lo cierra por su cuenta
-        console.warn('⚠️ Error al detener avatar (ignorado, HeyGen lo cierra automáticamente):', err);
+        console.warn('⚠️ Error al detener avatar (ignorado, intentaremos forzar cierre):', err);
+      }
+
+      // Si tenemos Session ID, forzar cierre mediante API directa
+      if (sessionId) {
+        console.log('🔨 Forzando cierre de sesión vía API de HeyGen...');
+        try {
+          const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+          await fetch(`${serverUrl}/api/force-close-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId })
+          });
+          console.log('✅ Sesión forzada a cerrar');
+        } catch (err) {
+          console.warn('⚠️ No se pudo forzar cierre (continuando):', err);
+        }
       }
 
       // Limpiar video
@@ -167,10 +189,11 @@ const AvatarView: React.FC = () => {
       }
 
       // Esperar un momento adicional para asegurar que HeyGen procese el cierre
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       avatarRef.current = null;
       setAvatar(null);
+      currentSessionId.current = null;
       console.log('✅ Limpieza completada');
     } catch (error) {
       console.error('❌ Error al limpiar avatar:', error);
@@ -445,7 +468,16 @@ const AvatarView: React.FC = () => {
       };
       console.log('📤 Parámetros a enviar a HeyGen API:', JSON.stringify(createParams, null, 2));
 
-      await avatarInstance.createStartAvatar(createParams);
+      const result = await avatarInstance.createStartAvatar(createParams);
+
+      // Guardar Session ID si está disponible
+      if (result && (result as any).session_id) {
+        currentSessionId.current = (result as any).session_id;
+        console.log('🆔 Session ID guardado:', currentSessionId.current);
+      } else if (avatarInstance && (avatarInstance as any).sessionId) {
+        currentSessionId.current = (avatarInstance as any).sessionId;
+        console.log('🆔 Session ID guardado desde instancia:', currentSessionId.current);
+      }
 
       console.log('✅ Avatar iniciado exitosamente');
       initializingAvatarRef.current = false; // Liberar el flag
@@ -539,14 +571,12 @@ const AvatarView: React.FC = () => {
         socketRef.current.emit('avatar-change-start');
       }
 
-      // Limpiar avatar actual (incluye 2 segundos de espera interna)
+      // Limpiar avatar actual (incluye 3 segundos de espera interna + forzado de cierre via API)
       await cleanupAvatar();
 
-      // Esperar un momento para asegurar que el stream anterior se cierre completamente
-      // HeyGen necesita tiempo para liberar la sesión anterior (aumentado a 12 seg por errores 500)
-      console.log('⏳ Esperando 12 segundos adicionales para que HeyGen libere completamente la sesión...');
-      console.log('💡 HeyGen puede tardar en liberar sesiones - por favor ten paciencia');
-      await new Promise(resolve => setTimeout(resolve, 12000));
+      // Esperar solo 2 segundos ya que estamos forzando el cierre de sesión
+      console.log('⏳ Esperando 2 segundos para confirmar cierre de sesión...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
