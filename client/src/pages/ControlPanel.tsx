@@ -461,7 +461,7 @@ const ControlPanel: React.FC = () => {
                 </label>
 
                 {selectedPresetName === 'Personalizado' ? (
-                  // Selector de voces para "Personalizado"
+                  // Selector de voces con buscador para "Personalizado"
                   <>
                     {voicesError ? (
                       <div style={{ padding: '10px', backgroundColor: '#fee', borderRadius: '8px', marginBottom: '10px' }}>
@@ -483,48 +483,59 @@ const ControlPanel: React.FC = () => {
                         </button>
                       </div>
                     ) : null}
-                    <select
+                    <input
+                      list="voice-list"
                       value={currentConfig.voiceId}
                       onChange={(e) => setCurrentConfig({ ...currentConfig, voiceId: e.target.value })}
                       disabled={isLoadingVoices}
+                      placeholder="Busca por nombre o pega el ID..."
                       style={{
                         width: '100%',
                         padding: '12px',
                         fontSize: '15px',
                         borderRadius: '8px',
                         border: '2px solid #ddd',
-                        cursor: isLoadingVoices ? 'wait' : 'pointer',
+                        cursor: isLoadingVoices ? 'wait' : 'text',
                         backgroundColor: isLoadingVoices ? '#f5f5f5' : 'white'
                       }}
-                    >
-                      <option value="">-- Selecciona una voz --</option>
-                      {Object.entries(
-                        availableVoices.reduce((acc, voice) => {
-                          if (!acc[voice.language]) acc[voice.language] = [];
-                          acc[voice.language].push(voice);
-                          return acc;
-                        }, {} as Record<string, Voice[]>)
-                      )
-                        .sort(([langA], [langB]) => {
+                    />
+                    <datalist id="voice-list">
+                      {availableVoices
+                        .sort((a, b) => {
                           // Español primero, luego inglés, luego el resto
-                          if (langA === 'Spanish') return -1;
-                          if (langB === 'Spanish') return 1;
-                          if (langA === 'English') return -1;
-                          if (langB === 'English') return 1;
-                          return langA.localeCompare(langB);
+                          if (a.language === 'Spanish' && b.language !== 'Spanish') return -1;
+                          if (a.language !== 'Spanish' && b.language === 'Spanish') return 1;
+                          if (a.language === 'English' && b.language !== 'English' && b.language !== 'Spanish') return -1;
+                          if (a.language !== 'English' && a.language !== 'Spanish' && b.language === 'English') return 1;
+                          // Dentro del mismo idioma, ordenar alfabéticamente
+                          if (a.language === b.language) return a.name.localeCompare(b.name);
+                          return a.language.localeCompare(b.language);
                         })
-                        .map(([language, voices]) => (
-                          <optgroup key={language} label={`${language} (${voices.length})`}>
-                            {voices
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((voice) => (
-                                <option key={voice.voice_id} value={voice.voice_id}>
-                                  {voice.name} ({voice.gender})
-                                </option>
-                              ))}
-                          </optgroup>
+                        .map((voice) => (
+                          <option key={voice.voice_id} value={voice.voice_id}>
+                            {voice.name} ({voice.gender}) - {voice.language} - {voice.voice_id}
+                          </option>
                         ))}
-                    </select>
+                    </datalist>
+                    {currentConfig.voiceId && (
+                      <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '6px', fontSize: '13px' }}>
+                        {(() => {
+                          const selectedVoice = availableVoices.find(v => v.voice_id === currentConfig.voiceId);
+                          if (selectedVoice) {
+                            return (
+                              <div>
+                                <strong>{selectedVoice.name}</strong> ({selectedVoice.gender}) - {selectedVoice.language}
+                                <br />
+                                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#666' }}>{selectedVoice.voice_id}</span>
+                              </div>
+                            );
+                          } else if (currentConfig.voiceId) {
+                            return <span style={{ color: '#666' }}>ID: {currentConfig.voiceId}</span>;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    )}
                     {currentConfig.voiceId && availableVoices.find(v => v.voice_id === currentConfig.voiceId)?.preview_audio && (
                       <div style={{ marginTop: '8px' }}>
                         <audio
