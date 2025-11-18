@@ -29,6 +29,7 @@ const ControlPanel: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [textInput, setTextInput] = useState<string>('');
   const [statusMessages, setStatusMessages] = useState<StatusMessage[]>([]);
+  const [interactionMode, setInteractionMode] = useState<'streaming' | 'text'>('streaming'); // Modo de interacción
 
   // Estados editables para los avatares
   const [avatarConfigs, setAvatarConfigs] = useState<AvatarConfig[]>([
@@ -241,6 +242,13 @@ const ControlPanel: React.FC = () => {
     setLastChange(new Date().toLocaleTimeString('es-ES'));
     setIsChangingAvatar(true);
     setIsAvatarReady(false);
+
+    // Establecer modo por defecto según el avatar
+    if (config.avatarId === 'Dexter_Doctor_Standing2_public') {
+      setInteractionMode('streaming'); // Dexter por defecto streaming
+    } else if (config.avatarId === 'Ann_Therapist_public') {
+      setInteractionMode('text'); // Ann por defecto texto
+    }
   }, [isConnected, isChangingAvatar, currentAvatar, addStatusMessage]);
 
   const handleStartVoiceChat = useCallback(() => {
@@ -328,9 +336,6 @@ const ControlPanel: React.FC = () => {
     const config = avatarConfigs.find(c => c.avatarId === currentAvatar);
     return config ? config.name : 'Desconocido';
   }, [avatarConfigs, currentAvatar]);
-
-  const isDoctorDexter = currentAvatar === 'Dexter_Doctor_Standing2_public';
-  const isCEOAnn = currentAvatar === 'Ann_Therapist_public';
 
   return (
     <div style={{
@@ -433,6 +438,100 @@ const ControlPanel: React.FC = () => {
             {getCurrentAvatarName()}
           </div>
         </div>
+
+        {/* Selector de Modo de Interacción */}
+        {isConnected && isAvatarReady && !isChangingAvatar && (
+          <div style={{
+            marginBottom: '30px',
+            padding: '20px',
+            backgroundColor: '#e7f3ff',
+            borderRadius: '10px',
+            border: '2px solid #667eea'
+          }}>
+            <div style={{ fontSize: '14px', color: '#666', marginBottom: '10px', fontWeight: 'bold' }}>
+              🎛️ Modo de Interacción:
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setInteractionMode('streaming');
+                  addStatusMessage('info', '🎤 Modo cambiado a: Voz (Streaming)');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '15px 20px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: interactionMode === 'streaming' ? '#28a745' : '#e9ecef',
+                  color: interactionMode === 'streaming' ? 'white' : '#666',
+                  border: interactionMode === 'streaming' ? '3px solid #1e7e34' : '2px solid #ccc',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: interactionMode === 'streaming'
+                    ? '0 4px 12px rgba(40, 167, 69, 0.3)'
+                    : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  if (interactionMode !== 'streaming') {
+                    e.currentTarget.style.backgroundColor = '#d3d3d3';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (interactionMode !== 'streaming') {
+                    e.currentTarget.style.backgroundColor = '#e9ecef';
+                  }
+                }}
+              >
+                🎤 Voz (Streaming)
+              </button>
+              <button
+                onClick={() => {
+                  setInteractionMode('text');
+                  addStatusMessage('info', '📝 Modo cambiado a: Texto');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '15px 20px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  backgroundColor: interactionMode === 'text' ? '#667eea' : '#e9ecef',
+                  color: interactionMode === 'text' ? 'white' : '#666',
+                  border: interactionMode === 'text' ? '3px solid #5568d3' : '2px solid #ccc',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: interactionMode === 'text'
+                    ? '0 4px 12px rgba(102, 126, 234, 0.3)'
+                    : '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  if (interactionMode !== 'text') {
+                    e.currentTarget.style.backgroundColor = '#d3d3d3';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (interactionMode !== 'text') {
+                    e.currentTarget.style.backgroundColor = '#e9ecef';
+                  }
+                }}
+              >
+                📝 Texto
+              </button>
+            </div>
+            <div style={{
+              marginTop: '10px',
+              fontSize: '12px',
+              color: '#666',
+              fontStyle: 'italic',
+              textAlign: 'center'
+            }}>
+              {interactionMode === 'streaming'
+                ? '🎙️ Habla directamente con el avatar'
+                : '✍️ Escribe y el avatar lo dirá en voz alta'}
+            </div>
+          </div>
+        )}
 
         {/* Selector de avatares */}
         <h2 style={{
@@ -684,15 +783,15 @@ const ControlPanel: React.FC = () => {
               🎛️ Controles del Avatar
             </h2>
 
-            {/* Doctor Dexter - Control de Voz */}
-            {isDoctorDexter && (
+            {/* Modo Streaming - Control de Voz */}
+            {interactionMode === 'streaming' && (
               <div style={{ textAlign: 'center' }}>
                 <h3 style={{
                   color: '#666',
                   marginBottom: '15px',
                   fontSize: '18px'
                 }}>
-                  Chat de Voz con Doctor Dexter
+                  Chat de Voz con {getCurrentAvatarName()}
                 </h3>
                 <button
                   onClick={isListening ? handleStopVoiceChat : handleStartVoiceChat}
@@ -726,14 +825,14 @@ const ControlPanel: React.FC = () => {
                     fontWeight: '500',
                     animation: 'pulse 2s ease-in-out infinite'
                   }}>
-                    🎙️ El micrófono está activo. Habla con el doctor en la vista del avatar.
+                    🎙️ El micrófono está activo. Habla con {getCurrentAvatarName()} en la vista del avatar.
                   </p>
                 )}
               </div>
             )}
 
-            {/* CEO Ann - Control de Texto */}
-            {isCEOAnn && (
+            {/* Modo Texto - Control de Texto */}
+            {interactionMode === 'text' && (
               <div>
                 <h3 style={{
                   color: '#666',
@@ -741,7 +840,7 @@ const ControlPanel: React.FC = () => {
                   fontSize: '18px',
                   textAlign: 'center'
                 }}>
-                  Texto a Voz con CEO Ann
+                  Texto a Voz con {getCurrentAvatarName()}
                 </h3>
 
 
@@ -756,7 +855,7 @@ const ControlPanel: React.FC = () => {
                         handleSendText('REPEAT');
                       }
                     }}
-                    placeholder="Escribe lo que Ann debe decir..."
+                    placeholder={`Escribe lo que ${getCurrentAvatarName()} debe decir...`}
                     style={{
                       flex: 1,
                       padding: '15px',

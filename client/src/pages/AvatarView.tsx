@@ -140,17 +140,34 @@ const AvatarView: React.FC = () => {
 
       // Detener chat de voz si está activo
       if (isListening) {
-        await currentAvatar.closeVoiceChat();
-        setIsListening(false);
+        console.log('🛑 Cerrando chat de voz activo...');
+        try {
+          await currentAvatar.closeVoiceChat();
+          setIsListening(false);
+          console.log('✅ Chat de voz cerrado');
+        } catch (err) {
+          console.warn('⚠️ Error al cerrar chat de voz:', err);
+        }
       }
 
-      // Detener avatar
-      await currentAvatar.stopAvatar();
+      // Detener avatar y esperar a que termine
+      console.log('🛑 Deteniendo avatar...');
+      try {
+        await currentAvatar.stopAvatar();
+        console.log('✅ Avatar detenido');
+      } catch (err) {
+        // Error de CORS es común al detener - HeyGen lo cierra por su cuenta
+        console.warn('⚠️ Error al detener avatar (ignorado, HeyGen lo cierra automáticamente):', err);
+      }
 
       // Limpiar video
       if (videoRef.current) {
         videoRef.current.srcObject = null;
+        console.log('✅ Video limpiado');
       }
+
+      // Esperar un momento adicional para asegurar que HeyGen procese el cierre
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       avatarRef.current = null;
       setAvatar(null);
@@ -325,15 +342,16 @@ const AvatarView: React.FC = () => {
 
             // Notificar al servidor que el avatar está listo
             if (socketRef.current) {
-              // Si hay un cambio de avatar pendiente, notificarlo primero
+              // Si hay un cambio de avatar pendiente, notificarlo primero para actualizar el estado del servidor
               if (pendingServerNotification.current) {
-                console.log('📡 Notificando cambio de avatar al servidor:', pendingServerNotification.current.avatarId);
-                socketRef.current.emit('change-avatar', pendingServerNotification.current);
+                console.log('📡 Notificando estado de avatar al servidor:', pendingServerNotification.current.avatarId);
+                // Solo enviar para actualizar estado, no para hacer broadcast
+                socketRef.current.emit('avatar-state-update', pendingServerNotification.current);
                 pendingServerNotification.current = null;
               }
 
-              console.log('📡 Emitiendo evento avatar-ready al servidor');
-              socketRef.current.emit('avatar-ready');
+              console.log('📡 Emitiendo evento avatar-ready al servidor con ID:', currentAvatarIdRef.current);
+              socketRef.current.emit('avatar-ready', { avatarId: currentAvatarIdRef.current });
             } else {
               console.warn('⚠️ No hay conexión socket para emitir avatar-ready');
             }
@@ -448,14 +466,26 @@ const AvatarView: React.FC = () => {
           console.error('🔍 Error completo:', errorString);
           console.error('🔍 Error stack:', error.stack);
 
+          // Intentar extraer el body del error de la API
+          const errorObj = error as any;
+          console.error('🔍 Error completo (objeto):', JSON.stringify(errorObj, null, 2));
+
           // Si el error tiene propiedades adicionales
-          if ((error as any).response) {
-            console.error('🔍 Response del error:', (error as any).response);
-            errorDetails = JSON.stringify((error as any).response);
+          if (errorObj.response) {
+            console.error('🔍 Response del error:', errorObj.response);
+            errorDetails = JSON.stringify(errorObj.response);
           }
-          if ((error as any).data) {
-            console.error('🔍 Data del error:', (error as any).data);
-            errorDetails += ' | Data: ' + JSON.stringify((error as any).data);
+          if (errorObj.data) {
+            console.error('🔍 Data del error:', errorObj.data);
+            errorDetails += ' | Data: ' + JSON.stringify(errorObj.data);
+          }
+          if (errorObj.body) {
+            console.error('🔍 Body del error:', errorObj.body);
+            errorDetails += ' | Body: ' + JSON.stringify(errorObj.body);
+          }
+          if (errorObj.details) {
+            console.error('🔍 Details del error:', errorObj.details);
+            errorDetails += ' | Details: ' + JSON.stringify(errorObj.details);
           }
         } catch (e) {
           console.error('No se pudo parsear detalles del error');
@@ -497,7 +527,7 @@ const AvatarView: React.FC = () => {
     isChangingAvatar.current = true;
 
     try {
-      console.log(`🔄 [AVATAR] Cambiando de ${currentAvatarId} a avatar: ${newState.avatarId}`);
+      console.log(`🔄 [AVATAR] Cambiando de ${currentAvatarIdRef.current} a avatar: ${newState.avatarId}`);
       setIsLoading(true);
       setError(null);
 
@@ -509,13 +539,14 @@ const AvatarView: React.FC = () => {
         socketRef.current.emit('avatar-change-start');
       }
 
-      // Limpiar avatar actual
+      // Limpiar avatar actual (incluye 2 segundos de espera interna)
       await cleanupAvatar();
 
       // Esperar un momento para asegurar que el stream anterior se cierre completamente
-      // HeyGen necesita tiempo para liberar la sesión anterior
-      console.log('⏳ Esperando 3 segundos para que HeyGen libere la sesión anterior...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // HeyGen necesita tiempo para liberar la sesión anterior (aumentado a 12 seg por errores 500)
+      console.log('⏳ Esperando 12 segundos adicionales para que HeyGen libere completamente la sesión...');
+      console.log('💡 HeyGen puede tardar en liberar sesiones - por favor ten paciencia');
+      await new Promise(resolve => setTimeout(resolve, 12000));
 
       // Solo resetear el estado de audio si nunca se ha activado
       if (!audioActivatedOnce.current) {
@@ -618,7 +649,7 @@ const AvatarView: React.FC = () => {
         setUserSpeaking(false);
       });
 
-      // Iniciar nuevo avatar
+      // Iniciar nuevo avatar con reintentos
       console.log(`🚀 Iniciando nuevo avatar: ${newState.avatarId}`);
       console.log(`🧠 Nuevo Knowledge Base: ${newState.knowledgeBase}`);
       console.log(`🎥 Nueva Calidad: ${newState.quality || 'high'}`);
@@ -645,7 +676,28 @@ const AvatarView: React.FC = () => {
       };
       console.log('📤 Parámetros de cambio a enviar a HeyGen API:', JSON.stringify(changeParams, null, 2));
 
-      await avatarInstance.createStartAvatar(changeParams);
+      // Intentar crear avatar con reintentos en caso de error 400/503
+      let retries = 0;
+      const maxRetries = 2;
+      while (retries <= maxRetries) {
+        try {
+          await avatarInstance.createStartAvatar(changeParams);
+          console.log('✅ Avatar creado exitosamente');
+          break; // Salir del bucle si tiene éxito
+        } catch (err: any) {
+          retries++;
+          const errorMsg = err?.message || err?.toString() || 'Error desconocido';
+
+          // Si es error 400 o 503 y aún quedan reintentos
+          if ((errorMsg.includes('400') || errorMsg.includes('503')) && retries <= maxRetries) {
+            console.warn(`⚠️ Error ${errorMsg.includes('400') ? '400' : '503'} al crear avatar. Reintento ${retries}/${maxRetries} en 3 segundos...`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } else {
+            // Si no es error 400/503 o se acabaron los reintentos, lanzar el error
+            throw err;
+          }
+        }
+      }
 
       currentAvatarIdRef.current = newState.avatarId;
       setCurrentAvatarId(newState.avatarId);

@@ -171,9 +171,37 @@ io.on('connection', (socket: Socket) => {
     console.log('📢 [SERVER] Avatar change broadcasted to all clients');
   });
 
+  // Actualizar estado del servidor sin hacer broadcast de cambio (para carga inicial de avatar personalizado)
+  socket.on('avatar-state-update', (newState: { avatarId: string; voiceId: string; knowledgeBase: string; backgroundUrl?: string; quality?: 'low' | 'medium' | 'high'; aspectRatio?: '16:9' | '9:16' | '1:1' | '4:3' }) => {
+    console.log('🔄 [SERVER] Actualización silenciosa de estado de avatar:', newState.avatarId);
+
+    // Actualizar estado
+    currentAvatarState = {
+      avatarId: newState.avatarId,
+      voiceId: newState.voiceId,
+      knowledgeBase: newState.knowledgeBase,
+      backgroundUrl: newState.backgroundUrl,
+      quality: newState.quality || 'high',
+      aspectRatio: newState.aspectRatio || '16:9',
+      ready: false // Se marcará como ready cuando llegue avatar-ready
+    };
+
+    console.log('📦 [SERVER] Estado actualizado a:', currentAvatarState.avatarId);
+
+    // Notificar solo el estado actualizado al panel de control (sin hacer cambio de avatar)
+    io.emit('avatar-state', currentAvatarState);
+  });
+
   // Cuando el avatar está listo (viene desde AvatarView)
-  socket.on('avatar-ready', () => {
+  socket.on('avatar-ready', (data?: { avatarId?: string }) => {
     console.log('✅ [SERVER] Avatar reporta que está listo');
+
+    // Si viene con avatarId, actualizar el estado para estar sincronizado
+    if (data?.avatarId) {
+      console.log('📦 [SERVER] Sincronizando avatar ID desde avatar-ready:', data.avatarId);
+      currentAvatarState.avatarId = data.avatarId;
+    }
+
     currentAvatarState.ready = true;
 
     // Notificar a todos que el avatar está listo
@@ -293,6 +321,10 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('disconnect', () => {
     console.log('⚠️ Cliente desconectado:', socket.id);
+
+    // Invalidar token al desconectar para forzar uno nuevo en la próxima conexión
+    console.log('🗑️ Invalidando cache de token por desconexión de cliente');
+    tokenCache = null;
   });
 
   // ==============================
