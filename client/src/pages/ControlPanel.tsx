@@ -743,18 +743,6 @@ const ControlPanel: React.FC = () => {
                   Texto a Voz con CEO Ann
                 </h3>
 
-                {/* Nota sobre emociones */}
-                <div style={{
-                  marginBottom: '15px',
-                  padding: '12px',
-                  backgroundColor: '#fff3cd',
-                  border: '1px solid #ffc107',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  color: '#856404'
-                }}>
-                  💡 <strong>Nota:</strong> Las emociones de voz se configuran al crear el avatar. Para cambiar la emoción, edita el avatar y selecciona una emoción diferente al crearlo.
-                </div>
 
                 {/* Input de Texto */}
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
