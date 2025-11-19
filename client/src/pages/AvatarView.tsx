@@ -124,11 +124,14 @@ const AvatarView: React.FC = () => {
       // Cerrar chat de voz si está activo
       if (isListening) {
         try {
+          console.log('🛑 Cerrando chat de voz antes de detener avatar...');
+          setIsListening(false); // Actualizar estado primero
           await currentAvatar.closeVoiceChat();
-          setIsListening(false);
+          // Esperar un poco para que el WebSocket se cierre limpiamente
+          await new Promise(resolve => setTimeout(resolve, 200));
           console.log('✅ Chat de voz cerrado');
         } catch (err) {
-          console.warn('⚠️ Error al cerrar chat de voz:', err);
+          console.warn('⚠️ Error al cerrar chat de voz (continuando):', err);
         }
       }
 
@@ -478,21 +481,37 @@ const AvatarView: React.FC = () => {
       return;
     }
 
+    // Si no está escuchando, no hacer nada
+    if (!isListening) {
+      console.log('⚠️ Voice chat ya está detenido');
+      return;
+    }
+
     try {
       console.log('🛑 Deteniendo chat de voz...');
-      await avatarRef.current.closeVoiceChat();
+
+      // Primero actualizar el estado para evitar que se sigan procesando eventos
       setIsListening(false);
       clearSubtitle();
-      console.log('✅ Chat de voz detenido');
+
+      // Luego cerrar el voice chat
+      await avatarRef.current.closeVoiceChat();
+
+      // Pequeña espera para asegurar que el WebSocket se cierre limpiamente
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log('✅ Chat de voz detenido correctamente');
 
       if (socketRef.current) {
         socketRef.current.emit('voice-chat-stopped');
       }
     } catch (err) {
       console.error('❌ Error al detener chat de voz:', err);
-      setError('Error al detener chat de voz');
+      // Asegurar que el estado se actualice incluso si hay error
+      setIsListening(false);
+      clearSubtitle();
     }
-  }, [clearSubtitle]);
+  }, [isListening, clearSubtitle]);
 
   // Enviar texto al avatar
   const handleSpeakText = useCallback(async (text: string, taskType: string = 'REPEAT') => {
