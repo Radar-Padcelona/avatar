@@ -314,11 +314,31 @@ const AvatarView: React.FC = () => {
         }
       });
 
+      // Agregar listener para errores del avatar
+      avatarInstance.on(StreamingEvents.AVATAR_TALKING_MESSAGE, (event: any) => {
+        console.log('💬 Avatar mensaje:', event?.detail);
+        if (event?.detail?.message) {
+          console.log('💬 Avatar está diciendo:', event.detail.message);
+        }
+      });
+
+      // Listener genérico para debug
+      const allEvents = Object.values(StreamingEvents);
+      allEvents.forEach((eventName) => {
+        if (!['STREAM_READY', 'AVATAR_START_TALKING', 'AVATAR_STOP_TALKING',
+              'USER_START', 'USER_STOP', 'USER_TALKING_MESSAGE', 'STREAM_DISCONNECTED',
+              'AVATAR_TALKING_MESSAGE'].includes(eventName)) {
+          avatarInstance.on(eventName, (event: any) => {
+            console.log(`📡 Evento [${eventName}]:`, event?.detail || event);
+          });
+        }
+      });
+
       // Iniciar avatar
       console.log('🚀 Iniciando avatar:', config.avatarId);
       const quality = (config.quality || 'high') as AvatarQuality;
 
-      const startParams = {
+      const startParams: any = {
         avatarName: config.avatarId,
         voice: {
           voiceId: config.voiceId,
@@ -327,12 +347,20 @@ const AvatarView: React.FC = () => {
         },
         quality: quality,
         language: 'es',
-        videoEncoding: 'H264', // Mejor compatibilidad y potencialmente menor latencia
-        knowledgeBase: config.knowledgeBase || 'Eres un asistente útil y amigable.'
+        videoEncoding: 'H264' // Mejor compatibilidad y potencialmente menor latencia
       };
+
+      // Agregar knowledgeBase si existe
+      if (config.knowledgeBase && config.knowledgeBase.trim() !== '') {
+        startParams.knowledgeBase = config.knowledgeBase;
+        console.log('📚 Using knowledgeBase for AI conversation');
+      } else {
+        console.log('⚠️ No knowledgeBase provided - avatar may not respond to voice');
+      }
 
       console.log('📤 Parámetros de inicio:', JSON.stringify(startParams, null, 2));
       const result = await avatarInstance.createStartAvatar(startParams);
+      console.log('📋 Resultado de createStartAvatar:', result);
 
       // Guardar Session ID
       if (result && (result as any).session_id) {
