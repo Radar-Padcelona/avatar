@@ -84,7 +84,7 @@ const ControlPanel: React.FC = () => {
       icon: '👩‍💼',
       config: {
         avatarId: 'Ann_Therapist_public',
-        voiceId: '6eafa43fdc16437b8f5abe512cc2b3cf',
+        voiceId: 'a78e0a4dbbe247d0a704b91175e6d987',
         knowledgeBase: '*Situación*\n' +
             'Eres la Doctora Joana, una psiquiatra experta especializada en el tratamiento de esquizofrenia en adolescentes de 13 años en adelante. Trabajas directamente con pacientes y familias, proporcionando orientación clínica basada en tu experiencia con Rxulti (brexpiprazol) como opción terapéutica efectiva para este grupo de edad.\n' +
             '\n' +
@@ -289,11 +289,6 @@ const ControlPanel: React.FC = () => {
     setIsStopping(true);
     socketRef.current.emit('stop-avatar');
   }, [isConnected, addStatusMessage]);
-
-  const handleStartVoiceChat = useCallback(() => {
-    if (!socketRef.current || !isConnected || !isAvatarActive) return;
-    socketRef.current.emit('start-voice-chat');
-  }, [isConnected, isAvatarActive]);
 
   const handleStopVoiceChat = useCallback(() => {
     if (!socketRef.current || !isConnected || !isAvatarActive) return;
@@ -762,74 +757,72 @@ const ControlPanel: React.FC = () => {
               </p>
             </div>
 
-            {/* Controles de voz */}
-            {interactionMode === 'streaming' && isAvatarActive && (
+            {/* Instrucciones para modo voz */}
+            {interactionMode === 'streaming' && isAvatarActive && !isListening && (
+              <div style={{
+                marginBottom: '25px',
+                padding: '30px',
+                backgroundColor: '#e7f3ff',
+                borderRadius: '15px',
+                border: '2px solid #007bff',
+                textAlign: 'center'
+              }}>
+                <h3 style={{ fontSize: '20px', marginBottom: '15px', color: '#333' }}>
+                  🎤 Modo Voz Activado
+                </h3>
+                <p style={{ fontSize: '16px', color: '#555', marginBottom: '20px', lineHeight: '1.6' }}>
+                  Para hablar con el avatar:
+                </p>
+                <div style={{
+                  backgroundColor: 'white',
+                  padding: '20px',
+                  borderRadius: '10px',
+                  marginBottom: '15px'
+                }}>
+                  <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#007bff', marginBottom: '10px' }}>
+                    👉 Haz clic en el botón grande que aparece en la pantalla del avatar
+                  </p>
+                  <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                    El navegador requiere tu interacción directa para activar el micrófono
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Estado de voz activa */}
+            {interactionMode === 'streaming' && isAvatarActive && isListening && (
               <div style={{
                 marginBottom: '25px',
                 padding: '25px',
                 backgroundColor: '#d4edda',
                 borderRadius: '15px',
-                border: '2px solid #28a745'
+                border: '2px solid #28a745',
+                textAlign: 'center'
               }}>
                 <h3 style={{ fontSize: '18px', marginBottom: '15px', color: '#333' }}>
-                  🎤 Control de Voz
+                  ✅ Voz Activa
                 </h3>
-                <div style={{ display: 'flex', gap: '15px' }}>
-                  <button
-                    onClick={handleStartVoiceChat}
-                    disabled={isListening}
-                    style={{
-                      flex: 1,
-                      padding: '15px',
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      backgroundColor: isListening ? '#ccc' : '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '10px',
-                      cursor: isListening ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    🎤 Iniciar Voz
-                  </button>
-                  <button
-                    onClick={handleStopVoiceChat}
-                    disabled={!isListening}
-                    style={{
-                      flex: 1,
-                      padding: '15px',
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      backgroundColor: !isListening ? '#ccc' : '#ffc107',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '10px',
-                      cursor: !isListening ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    🛑 Detener Voz
-                  </button>
-                </div>
-                {isListening && (
-                  <div style={{
-                    marginTop: '15px',
-                    padding: '15px',
-                    backgroundColor: '#fff3cd',
-                    borderRadius: '10px',
-                    textAlign: 'center',
+                <button
+                  onClick={handleStopVoiceChat}
+                  style={{
+                    padding: '15px 40px',
+                    fontSize: '16px',
                     fontWeight: 'bold',
-                    color: '#856404'
-                  }}>
-                    🎤 Escuchando...
-                  </div>
-                )}
+                    backgroundColor: '#ffc107',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🛑 Detener Voz
+                </button>
                 {isSpeaking && (
                   <div style={{
                     marginTop: '15px',
                     padding: '15px',
                     backgroundColor: '#d1ecf1',
                     borderRadius: '10px',
-                    textAlign: 'center',
                     fontWeight: 'bold',
                     color: '#0c5460'
                   }}>
