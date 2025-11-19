@@ -318,7 +318,7 @@ const AvatarView: React.FC = () => {
         avatarName: config.avatarId,
         voice: {
           voiceId: config.voiceId,
-          rate: 1.2, // Velocidad ligeramente más rápida para respuestas ágiles
+          rate: 1, // Velocidad ligeramente más rápida para respuestas ágiles
           emotion: VoiceEmotion.FRIENDLY
         },
         quality: quality,
