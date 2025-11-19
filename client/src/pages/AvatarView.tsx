@@ -176,6 +176,8 @@ const AvatarView: React.FC = () => {
       setIsListening(false);
       setIsSpeaking(false);
       setIsProcessing(false);
+      setAudioEnabled(false);
+      audioActivatedOnce.current = false; // Resetear para que el próximo avatar también requiera activación
 
       console.log('✅ Avatar completamente detenido');
 
@@ -192,6 +194,8 @@ const AvatarView: React.FC = () => {
       setAvatar(null);
       currentSessionId.current = null;
       setCurrentConfig(null);
+      setAudioEnabled(false);
+      audioActivatedOnce.current = false; // Resetear también en caso de error
 
       if (videoRef.current) {
         videoRef.current.srcObject = null;
