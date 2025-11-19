@@ -33,6 +33,7 @@ const AvatarView: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<AvatarConfig | null>(null);
+  const [isConnectingVoice, setIsConnectingVoice] = useState(false);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -317,11 +318,27 @@ const AvatarView: React.FC = () => {
         }
       });
 
-      // Agregar listener para errores del avatar
+      // Agregar listener para mensajes del avatar
       avatarInstance.on(StreamingEvents.AVATAR_TALKING_MESSAGE, (event: any) => {
         console.log('💬 Avatar mensaje:', event?.detail);
         if (event?.detail?.message) {
           console.log('💬 Avatar está diciendo:', event.detail.message);
+        } else {
+          console.warn('⚠️ AVATAR_TALKING_MESSAGE sin mensaje - posible problema con IA');
+        }
+      });
+
+      // Listener para detectar problemas con la generación de respuestas
+      avatarInstance.on('avatar_end_message', (event: any) => {
+        console.log('🔚 Avatar finalizó mensaje:', event?.detail);
+        const duration = event?.detail?.duration_ms || 0;
+        if (duration === 0) {
+          console.error('❌ Avatar finalizó sin generar audio (duration_ms: 0)');
+          console.error('❌ Esto puede indicar:');
+          console.error('   1. Problema con la API Key de HeyGen');
+          console.error('   2. Cuota de IA agotada');
+          console.error('   3. Avatar no compatible con modo conversacional');
+          console.error('   4. knowledgeBase mal configurado');
         }
       });
 
@@ -350,13 +367,16 @@ const AvatarView: React.FC = () => {
         },
         quality: quality,
         language: 'es',
-        videoEncoding: 'H264' // Mejor compatibilidad y potencialmente menor latencia
+        videoEncoding: 'H264', // Mejor compatibilidad y potencialmente menor latencia
+        // Importante: knowledgeBase debe estar en el objeto principal, no anidado
+        ...(config.knowledgeBase && config.knowledgeBase.trim() !== ''
+          ? { knowledgeBase: config.knowledgeBase }
+          : {})
       };
 
-      // Agregar knowledgeBase si existe
       if (config.knowledgeBase && config.knowledgeBase.trim() !== '') {
-        startParams.knowledgeBase = config.knowledgeBase;
         console.log('📚 Using knowledgeBase for AI conversation');
+        console.log('📚 knowledgeBase content:', config.knowledgeBase.substring(0, 100) + '...');
       } else {
         console.log('⚠️ No knowledgeBase provided - avatar may not respond to voice');
       }
@@ -413,6 +433,8 @@ const AvatarView: React.FC = () => {
 
     try {
       console.log('🎤 Iniciando chat de voz...');
+      setIsConnectingVoice(true); // Mostrar indicador de "Conectando..."
+
       console.log('🎤 Estado del video:', {
         exists: !!videoRef.current,
         muted: videoRef.current?.muted,
@@ -444,10 +466,15 @@ const AvatarView: React.FC = () => {
       const result = await avatarRef.current.startVoiceChat();
       console.log('✅ startVoiceChat completado, resultado:', result);
 
+      // IMPORTANTE: Esperar un momento adicional para que la conexión con IA se establezca
+      console.log('⏳ Esperando que la conexión con IA se establezca completamente...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Aumentado a 1 segundo
+
       setIsListening(true);
+      setIsConnectingVoice(false); // Ocultar indicador de "Conectando..."
       microphonePermissionGranted.current = true;
 
-      console.log('✅ Chat de voz iniciado correctamente');
+      console.log('✅ Chat de voz iniciado correctamente y listo para conversación');
       console.log('✅ isListening actualizado a true');
 
       if (socketRef.current) {
@@ -466,6 +493,7 @@ const AvatarView: React.FC = () => {
 
       // Si falla, asegurar que los estados se limpien
       setIsListening(false);
+      setIsConnectingVoice(false);
 
       // Notificar al servidor del error
       if (socketRef.current) {
@@ -827,6 +855,30 @@ const AvatarView: React.FC = () => {
           }}>
             El navegador requiere tu interacción para activar el micrófono
           </p>
+        </div>
+      )}
+
+      {/* Indicador de conexión de voz */}
+      {isConnectingVoice && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(0, 123, 255, 0.95)',
+          color: 'white',
+          padding: '30px 60px',
+          borderRadius: '20px',
+          fontSize: '24px',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          zIndex: 2000,
+          boxShadow: '0 8px 32px rgba(0, 123, 255, 0.6)'
+        }}>
+          <div style={{ marginBottom: '15px' }}>⏳ Conectando voz...</div>
+          <div style={{ fontSize: '16px', fontWeight: 'normal', opacity: 0.9 }}>
+            Por favor espera un momento
+          </div>
         </div>
       )}
 
