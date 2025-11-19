@@ -361,13 +361,29 @@ const AvatarView: React.FC = () => {
 
   // Iniciar chat de voz
   const handleStartVoiceChat = useCallback(async () => {
+    console.log('🎤 [handleStartVoiceChat] Iniciando...');
+    console.log('🎤 [handleStartVoiceChat] avatarRef.current:', !!avatarRef.current);
+    console.log('🎤 [handleStartVoiceChat] isListening actual:', isListening);
+
     if (!avatarRef.current) {
       console.error('❌ No hay avatar activo');
       return;
     }
 
+    // Si ya está escuchando, no hacer nada
+    if (isListening) {
+      console.warn('⚠️ Voice chat ya está activo');
+      return;
+    }
+
     try {
       console.log('🎤 Iniciando chat de voz...');
+      console.log('🎤 Estado del video:', {
+        exists: !!videoRef.current,
+        muted: videoRef.current?.muted,
+        paused: videoRef.current?.paused,
+        readyState: videoRef.current?.readyState
+      });
 
       // PRIMERO: Activar el audio del video con la interacción del usuario
       if (videoRef.current) {
@@ -383,31 +399,45 @@ const AvatarView: React.FC = () => {
         }
       }
 
+      // Pequeña espera para asegurar que el AudioContext se active
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // SEGUNDO: Iniciar el voice chat (esto solicita permisos de micrófono)
       console.log('🎤 Solicitando permisos de micrófono y activando voice chat...');
-      await avatarRef.current.startVoiceChat();
+      console.log('🎤 Llamando a avatarRef.current.startVoiceChat()...');
+
+      const result = await avatarRef.current.startVoiceChat();
+      console.log('✅ startVoiceChat completado, resultado:', result);
 
       setIsListening(true);
       microphonePermissionGranted.current = true;
 
       console.log('✅ Chat de voz iniciado correctamente');
+      console.log('✅ isListening actualizado a true');
 
       if (socketRef.current) {
         socketRef.current.emit('voice-chat-started');
+        console.log('✅ Evento voice-chat-started emitido al servidor');
       }
     } catch (err: any) {
       console.error('❌ Error al iniciar chat de voz:', err);
       console.error('❌ Detalles del error:', {
         message: err.message,
         name: err.name,
-        stack: err.stack
+        stack: err.stack,
+        fullError: err
       });
       setError(`Error al iniciar chat de voz: ${err.message || 'Error desconocido'}`);
 
       // Si falla, asegurar que los estados se limpien
       setIsListening(false);
+
+      // Notificar al servidor del error
+      if (socketRef.current) {
+        socketRef.current.emit('voice-chat-stopped');
+      }
     }
-  }, []);
+  }, [isListening]);
 
   // Detener chat de voz
   const handleStopVoiceChat = useCallback(async () => {
@@ -503,7 +533,7 @@ const AvatarView: React.FC = () => {
       }
     };
 
-    cleanupPreviousSessions();
+    cleanupPreviousSessions().catch(err => console.warn('Error en cleanup:', err));
 
     const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
     const socketInstance = io(serverUrl, {
@@ -537,24 +567,24 @@ const AvatarView: React.FC = () => {
     // Evento para detener avatar
     socketInstance.on('stop-avatar', () => {
       console.log('🛑 [AVATAR] Recibida solicitud de detención');
-      stopAvatar();
+      stopAvatar().catch(err => console.error('Error al detener avatar:', err));
     });
 
     // Eventos de chat de voz
     socketInstance.on('start-voice-chat', () => {
       console.log('🔔 [AVATAR] Solicitud de chat de voz recibida');
-      handleStartVoiceChat();
+      handleStartVoiceChat().catch(err => console.error('Error al iniciar voice chat:', err));
     });
 
     socketInstance.on('stop-voice-chat', () => {
       console.log('🔔 [AVATAR] Solicitud de detener chat de voz');
-      handleStopVoiceChat();
+      handleStopVoiceChat().catch(err => console.error('Error al detener voice chat:', err));
     });
 
     // Evento de texto
     socketInstance.on('speak-text', (data: { text: string; taskType?: string }) => {
       console.log('📝 [AVATAR] Solicitud de hablar texto:', data);
-      handleSpeakText(data.text, data.taskType);
+      handleSpeakText(data.text, data.taskType).catch(err => console.error('Error al hablar texto:', err));
     });
 
     return () => {
