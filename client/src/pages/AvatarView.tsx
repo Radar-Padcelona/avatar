@@ -726,6 +726,59 @@ const AvatarView: React.FC = () => {
       )}
 
 
+      {/* Botón flotante para activar voz (solo visible cuando el panel de control inicia voice chat) */}
+      {currentConfig && !isListening && !audioActivatedOnce.current && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 1000
+        }}>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('🖱️ Clic directo del usuario en botón de activación');
+              await handleStartVoiceChat();
+            }}
+            style={{
+              padding: '30px 60px',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              boxShadow: '0 8px 32px rgba(0, 123, 255, 0.4)',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.boxShadow = '0 12px 48px rgba(0, 123, 255, 0.6)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 123, 255, 0.4)';
+            }}
+          >
+            🎤 Haz clic aquí para activar voz
+          </button>
+          <p style={{
+            textAlign: 'center',
+            marginTop: '20px',
+            color: 'white',
+            fontSize: '16px',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            padding: '10px 20px',
+            borderRadius: '10px'
+          }}>
+            El navegador requiere tu interacción para activar el micrófono
+          </p>
+        </div>
+      )}
+
       {/* Indicadores de estado */}
       {currentConfig && (
         <div style={{
