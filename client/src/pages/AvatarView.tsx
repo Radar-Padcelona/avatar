@@ -318,7 +318,7 @@ const AvatarView: React.FC = () => {
         avatarName: config.avatarId,
         voice: {
           voiceId: config.voiceId,
-          rate: 1, // Velocidad ligeramente más rápida para respuestas ágiles
+          rate: 1.0, // Velocidad normal (1.0 = 100%)
           emotion: VoiceEmotion.FRIENDLY
         },
         quality: quality,
@@ -369,35 +369,43 @@ const AvatarView: React.FC = () => {
     try {
       console.log('🎤 Iniciando chat de voz...');
 
-      // HeyGen SDK maneja los permisos de micrófono internamente
-      // Cuando el usuario acepta, activa el AudioContext necesario para autoplay
-      await avatarRef.current.startVoiceChat();
-
-      // Una vez que voice chat está activo, asegurar que el video tenga audio
-      if (videoRef.current && videoRef.current.muted) {
-        console.log('🔊 Activando audio del video después de iniciar voice chat...');
+      // PRIMERO: Activar el audio del video con la interacción del usuario
+      if (videoRef.current) {
+        console.log('🔊 Activando audio del video con interacción del usuario...');
         videoRef.current.muted = false;
         try {
           await videoRef.current.play();
-          console.log('✅ Audio del video activado');
+          console.log('✅ Audio del video activado antes de voice chat');
+          setAudioEnabled(true);
+          audioActivatedOnce.current = true;
         } catch (playErr) {
-          console.warn('⚠️ No se pudo reactivar el audio del video:', playErr);
+          console.warn('⚠️ No se pudo activar el audio del video:', playErr);
         }
       }
 
+      // SEGUNDO: Iniciar el voice chat (esto solicita permisos de micrófono)
+      console.log('🎤 Solicitando permisos de micrófono y activando voice chat...');
+      await avatarRef.current.startVoiceChat();
+
       setIsListening(true);
-      setAudioEnabled(true);
-      audioActivatedOnce.current = true;
       microphonePermissionGranted.current = true;
 
-      console.log('✅ Chat de voz iniciado');
+      console.log('✅ Chat de voz iniciado correctamente');
 
       if (socketRef.current) {
         socketRef.current.emit('voice-chat-started');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('❌ Error al iniciar chat de voz:', err);
-      setError('Error al iniciar chat de voz');
+      console.error('❌ Detalles del error:', {
+        message: err.message,
+        name: err.name,
+        stack: err.stack
+      });
+      setError(`Error al iniciar chat de voz: ${err.message || 'Error desconocido'}`);
+
+      // Si falla, asegurar que los estados se limpien
+      setIsListening(false);
     }
   }, []);
 
